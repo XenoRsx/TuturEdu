@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "885169577226",
+    "project_id": "tuturedu-app",
+    "storage_bucket": "tuturedu-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885169577226:android:f2b9fba3f159532b512ef3",
+        "android_client_info": {
+          "package_name": "com.example.tuturedu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtDhydKrJTAGxURxj-0YM8p1_imkBiNrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
