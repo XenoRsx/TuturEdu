@@ -90,7 +90,9 @@ firebase deploy --only hosting
 
 ## Author
 MOHAMAD SYAFIQ IRFAN BIN ABDUL RAHMAN (LEAD DEVELOPER)
+
 SUTHESWARAN TAMILARASAN (CO DEVELOPER & TESTING)
+
 HARVINT  A/L SHAMUGANATHAN (CO DEVELOPER & UI/UX)
 
 Developed as a Final Year Project (FYP) at Politeknik METrO Tasek Gelugor, using Flutter & Firebase.
