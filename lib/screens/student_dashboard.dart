@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
+import 'lecturer_list_screen.dart';
 
 class StudentDashboard extends StatelessWidget {
   const StudentDashboard({super.key});
@@ -23,8 +24,34 @@ class StudentDashboard extends StatelessWidget {
           ),
         ],
       ),
-      body: const Center(
-        child: Text('Selamat Datang, Student! (Sistem TuturEdu)'),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Selamat Datang, Student! (Sistem TuturEdu)'),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const LecturerListScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.chat),
+              label: const Text('Cari Pensyarah'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
