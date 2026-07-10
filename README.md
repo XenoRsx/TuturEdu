@@ -2,7 +2,7 @@
 
 TuturEdu is a chat platform connecting Students, Lecturers, and Parents, built using Flutter and Firebase. The system restricts conversations to office hours only, ensuring a clear boundary between working hours and personal time for lecturers.
 
-This project is developed as a Final Year Project (FYP) at Politeknik Metro Tasek Gelugor.
+This project is developed as a Final Year Project (FYP) at Politeknik METrO Tasek Gelugor.
 
 Live demo: https://tuturedu-app.web.app/
 
@@ -90,7 +90,9 @@ firebase deploy --only hosting
 
 ## Author
 MOHAMAD SYAFIQ IRFAN BIN ABDUL RAHMAN (LEAD DEVELOPER)
+
 SUTHESWARAN TAMILARASAN (CO DEVELOPER & TESTING)
+
 HARVINT  A/L SHAMUGANATHAN (CO DEVELOPER & UI/UX)
 
 Developed as a Final Year Project (FYP) at Politeknik METrO Tasek Gelugor, using Flutter & Firebase.
