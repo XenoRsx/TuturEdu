@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'login_screen.dart';
-import 'lecturer_list_screen.dart';
+import 'teacher_list_screen.dart';
+import 'chat_list_screen.dart';
 
 class StudentDashboard extends StatelessWidget {
   const StudentDashboard({super.key});
@@ -35,14 +36,33 @@ class StudentDashboard extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const LecturerListScreen(),
+                    builder: (_) => const TeacherListScreen(),
                   ),
                 );
               },
               icon: const Icon(Icons.chat),
-              label: const Text('Cari Pensyarah'),
+              label: const Text('Cari Teacher'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ChatListScreen()),
+                );
+              },
+              icon: const Icon(Icons.forum),
+              label: const Text('Chat Saya'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey.shade700,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,

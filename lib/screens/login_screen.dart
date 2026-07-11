@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'lecturer_dashboard.dart';
+import 'teacher_dashboard.dart';
 import 'student_dashboard.dart';
 import 'parent_dashboard.dart';
 
@@ -46,10 +46,10 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
 
         // 3. Hantar user ke Dashboard mengikut role masing-masing
-        if (role == 'Lecturer') {
+        if (role == 'Teacher') {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const LecturerDashboard()),
+            MaterialPageRoute(builder: (_) => const TeacherDashboard()),
           );
         } else if (role == 'Student') {
           Navigator.pushReplacement(

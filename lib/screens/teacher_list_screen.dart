@@ -1,7 +1,7 @@
-// lib/screens/lecturer_list_screen.dart
+// lib/screens/teacher_list_screen.dart
 //
-// Screen untuk STUDENT cari & pilih lecturer untuk mula chat.
-// Bila student tap satu lecturer, sistem akan create/reuse chat document
+// Screen untuk STUDENT cari & pilih teacher untuk mula chat.
+// Bila student tap satu teacher, sistem akan create/reuse chat document
 // dalam Firestore, then terus bawa masuk ChatScreen.
 
 import 'package:flutter/material.dart';
@@ -9,18 +9,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_screen.dart';
 
-class LecturerListScreen extends StatefulWidget {
-  const LecturerListScreen({super.key});
+class TeacherListScreen extends StatefulWidget {
+  const TeacherListScreen({super.key});
 
   @override
-  State<LecturerListScreen> createState() => _LecturerListScreenState();
+  State<TeacherListScreen> createState() => _TeacherListScreenState();
 }
 
-class _LecturerListScreenState extends State<LecturerListScreen> {
+class _TeacherListScreenState extends State<TeacherListScreen> {
   String _searchQuery = '';
 
   // Chat ID dibuat consistent dengan susun UID mengikut abjad,
-  // supaya student & lecturer yang sama akan selalu dapat chat ID yang sama
+  // supaya student & teacher yang sama akan selalu dapat chat ID yang sama
   // (elak duplicate chat room bila mula chat berkali-kali).
   String _generateChatId(String uid1, String uid2) {
     final ids = [uid1, uid2]..sort();
@@ -29,19 +29,19 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
 
   Future<void> _startChat(
     BuildContext context,
-    String lecturerUid,
-    String lecturerName,
+    String teacherUid,
+    String teacherName,
   ) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    final chatId = _generateChatId(currentUser.uid, lecturerUid);
+    final chatId = _generateChatId(currentUser.uid, teacherUid);
     final chatRef = FirebaseFirestore.instance.collection('chats').doc(chatId);
 
     // Create chat document kalau belum wujud (set with merge, so kalau
     // dah ada takkan overwrite messages sedia ada)
     await chatRef.set({
-      'participants': [currentUser.uid, lecturerUid],
+      'participants': [currentUser.uid, teacherUid],
       'lastUpdated': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
@@ -51,7 +51,7 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           chatId: chatId,
-          otherUserName: lecturerName,
+          otherUserName: teacherName,
         ),
       ),
     );
@@ -61,7 +61,7 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cari Pensyarah'),
+        title: const Text('Cari Teacher'),
         backgroundColor: Colors.blue,
       ),
       body: Column(
@@ -70,7 +70,7 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               decoration: const InputDecoration(
-                hintText: 'Cari nama pensyarah...',
+                hintText: 'Cari nama teacher...',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(),
               ),
@@ -83,7 +83,7 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .where('role', isEqualTo: 'Lecturer')
+                  .where('role', isEqualTo: 'Teacher')
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -93,21 +93,26 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final lecturers = snapshot.data!.docs.where((doc) {
+                final teachers = snapshot.data!.docs.where((doc) {
                   final name = (doc['name'] ?? '').toString().toLowerCase();
                   return name.contains(_searchQuery);
                 }).toList();
 
-                if (lecturers.isEmpty) {
-                  return const Center(child: Text('Tiada pensyarah dijumpai.'));
+                if (teachers.isEmpty) {
+                  return const Center(child: Text('Tiada teacher dijumpai.'));
                 }
 
                 return ListView.builder(
-                  itemCount: lecturers.length,
+                  itemCount: teachers.length,
                   itemBuilder: (context, index) {
-                    final doc = lecturers[index];
+                    final doc = teachers[index];
                     final name = doc['name'] ?? 'Tanpa Nama';
-                    final email = doc['email'] ?? '';
+                    final subjectsList = List<String>.from(
+                      (doc.data() as Map<String, dynamic>)['subjects'] ?? [],
+                    );
+                    final subjectsText = subjectsList.isNotEmpty
+                        ? subjectsList.join(', ')
+                        : 'Subjek belum ditetapkan';
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -118,7 +123,7 @@ class _LecturerListScreenState extends State<LecturerListScreen> {
                         ),
                       ),
                       title: Text(name),
-                      subtitle: Text(email),
+                      subtitle: Text(subjectsText),
                       trailing: const Icon(Icons.chat_bubble_outline),
                       onTap: () => _startChat(context, doc.id, name),
                     );

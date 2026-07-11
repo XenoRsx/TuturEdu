@@ -3,6 +3,8 @@
 // Helper untuk check sama ada masa sekarang dalam office hour atau tidak.
 // Setting global: Isnin - Jumaat, 9:00 AM - 5:00 PM (boleh ubah kat bawah).
 
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 class OfficeHours {
   // ----- SETTING BOLEH UBAH DI SINI -----
   static const int startHour = 9; // 9 AM
@@ -16,8 +18,17 @@ class OfficeHours {
   ];
   // ----------------------------------------
 
+  // ----- DEBUG BYPASS (untuk testing sahaja) -----
+  // Set true untuk force chat SENTIASA terbuka semasa testing.
+  // SELAMAT: sebab dibalut dengan kDebugMode, flag ni automatik jadi `false`
+  // dalam production build (flutter build web / apk --release), walaupun
+  // kau lupa tukar balik ke `false` sebelum deploy.
+  static bool debugForceOpen = true;
+  // -------------------------------------------------
+
   /// Return true kalau masa sekarang dalam office hour.
   static bool isOfficeHourNow() {
+    if (kDebugMode && debugForceOpen) return true;
     final now = DateTime.now();
     return isWithinOfficeHour(now);
   }
@@ -48,8 +59,11 @@ class OfficeHours {
     // Kalau sekarang dalam working day tapi lepas office hour, check esok
     // Kalau weekend, cari working day seterusnya
     for (int i = 0; i < 8; i++) {
-      final candidate = DateTime(checkDay.year, checkDay.month, checkDay.day)
-          .add(Duration(days: i));
+      final candidate = DateTime(
+        checkDay.year,
+        checkDay.month,
+        checkDay.day,
+      ).add(Duration(days: i));
       if (workingDays.contains(candidate.weekday)) {
         // Kalau candidate hari ni dan office hour belum tamat, return hari ni
         if (i == 0 && now.hour < startHour) {
