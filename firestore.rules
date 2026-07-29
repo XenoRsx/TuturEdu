@@ -3,12 +3,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper: check sama ada user semasa ialah Admin
+    function isAdmin() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
     // Collection: users
     // - Sesiapa yang dah login boleh READ (perlu untuk teacher list & role check)
-    // - User hanya boleh EDIT profile dia sendiri
+    // - User boleh EDIT profile dia sendiri, ATAU Admin boleh edit/delete mana-mana user
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null &&
+                    (request.auth.uid == userId || isAdmin());
+    }
+
+    // Collection: subjectCatalog
+    // - Sesiapa yang dah login boleh READ (perlu untuk teacher/student pilih subjek)
+    // - Hanya Admin boleh tambah/edit/padam
+    match /subjectCatalog/{subjectId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Collection: chats
@@ -32,6 +48,21 @@ service cloud.firestore {
 
         // Elak sesiapa edit/delete mesej lepas dihantar
         allow update, delete: if false;
+      }
+
+      // Sub-collection: scheduledReplies (Overtime Mode - "Schedule Reply")
+      // Hanya participant boleh baca. Hanya pemilik (senderId) boleh cipta/
+      // kemaskini (contoh: tukar status jadi "sent", atau cancel/delete).
+      match /scheduledReplies/{replyId} {
+        allow read: if request.auth != null &&
+                     request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+
+        allow create: if request.auth != null &&
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+                       request.resource.data.senderId == request.auth.uid;
+
+        allow update, delete: if request.auth != null &&
+                       resource.data.senderId == request.auth.uid;
       }
     }
   }
