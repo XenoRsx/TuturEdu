@@ -54,9 +54,12 @@ users (collection)
 
 ```
 chats (collection)
-  └── {chatId}                          // format: "{uid1}_{uid2}" (uid disusun abjad)
-        ├── participants: array<string>  // [uid1, uid2]
-        ├── chatType: "student_teacher" | "parent_teacher"
+  └── {chatId}                          // 1:1 chat: "{uid1}_{uid2}" (uid disusun abjad); Group chat: auto-generated ID
+        ├── participants: array<string>  // 1:1: [uid1, uid2]; Group: [uid1, uid2, uid3, ...]
+        ├── chatType: "student_teacher" | "parent_teacher" | "group"   // ✅ "group" ditambah
+        ├── isGroup: boolean              // ✅ true untuk group chat, false/tiada untuk 1:1
+        ├── groupName: string (optional)  // ✅ hanya untuk group chat, contoh "Add Maths Form 4 - Batch A"
+        ├── groupAdmin: string (optional) // ✅ uid pencipta group (kelak untuk permission tambah/buang ahli)
         ├── lastMessage: string
         ├── lastUpdated: timestamp
         ├── messages (sub-collection)
@@ -66,9 +69,9 @@ chats (collection)
         │           ├── timestamp: timestamp
         │           ├── isOvertimeReply: boolean (optional)   // ✅ true jika dihantar via "Reply Now (Overtime Mode)"
         │           ├── isScheduledReply: boolean (optional)  // ✅ true jika dihantar via auto-send "Schedule Reply"
-        │           ├── attachmentUrl: string (optional)      // ✅ rujuk Seksyen 8
-        │           ├── attachmentType: "pdf" | "image" | "document" (optional)  // ✅ rujuk Seksyen 8
-        │           ├── attachmentName: string (optional)     // ✅ nama fail asal
+        │           ├── attachmentUrl: string (optional)      // 💡 rujuk Seksyen 8, belum dikod
+        │           ├── attachmentType: "pdf" | "image" | "document" (optional)  // 💡 rujuk Seksyen 8, belum dikod
+        │           ├── attachmentName: string (optional)     // 💡 rujuk Seksyen 8, belum dikod
         │           └── isQuickReply: boolean (optional)    // mesej dari quick-reply chip
         └── scheduledReplies (sub-collection)              // ✅ Overtime Mode - "Schedule Reply"
               └── {replyId}
@@ -141,11 +144,18 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Cari Pensyarah** — student boleh cari & pilih teacher untuk mula chat baru
 - **Office Hour Lock (Global)** — chat automatik dikunci di luar waktu pejabat (Isnin–Jumaat, 9AM–5PM), guna semakan `DateTime.now()` pada client
 - **Overtime Mode (Teacher)** — bila chat locked, teacher diberi pilihan "Reply Now (Overtime Mode)" atau "Schedule Reply" (lihat 4.1 & 5.4)
-- **File Upload / Attachment (PDF, Image, Document)** — sokongan hantar lampiran dalam chat, disahkan guna validation 3-lapisan (extension + MIME + magic number) — rujuk Seksyen 8
 - **Admin Dashboard** — hub khas untuk role Admin: quick stats (jumlah Student/Teacher/Parent), navigasi ke Manage Users & Manage Subjects
-- **Manage Users (Admin)** — Admin boleh search/filter user ikut role, tukar role user (contoh Student → Teacher), padam user (buang dokumen Firestore; akaun Firebase Authentication kekal — nota dipapar dalam UI, rujuk 4.2/limitation)
-- **Manage Subjects (Admin)** — Admin boleh tambah/padam entri dalam `subjectCatalog` (Subjek + Tahap, contoh "Add Maths Form 4") — rujuk Seksyen 3.6
+- **Manage Users (Admin)** — Admin boleh search/filter user ikut role, tukar role user (contoh Student → Teacher), padam user (buang dokumen Firestore; akaun Firebase Authentication kekal — nota dipapar dalam UI, rujuk 4.2/limitation), dan "Edit Subjects" (assign entri dari `subjectCatalog` ke Teacher/Student individu)
+- **Manage Subjects (Admin) (✅ CRUD penuh)** — Admin boleh Add/Edit/Delete entri `subjectCatalog`. **Add** guna dropdown (bukan free-text) untuk Subject & Level — senarai subjek biasa (Bahasa Malaysia, English, Add Maths, dll.) & level (Year 1-6, Form 1-5, Lower/Upper Six), dengan pilihan "Other (type manually)" yang papar text field custom kalau subjek/level tak ada dalam senarai. Ini + duplicate-name check (case-sensitive exact match sebelum create) elak inconsistency macam "Add Maths" vs "add maths". **Edit** (rename, masih free-text sebab nama gabungan susah nak split balik ke Subject+Level) papar amaran berapa ramai profile (`users.subjects arrayContains`) yang sedang guna nama tu sebelum simpan — sebab `users.subjects` simpan nama sebagai plain string (bukan reference ke dokumen catalog), rename di sini TIDAK auto-update profile yang dah assign. **Delete** papar amaran usage count yang sama sebelum confirm. Ada search field untuk tapis senarai.
 - **Firestore Security Rules** — setiap chat & scheduledReplies hanya boleh diakses oleh participant/pemilik yang terlibat; `users` & `subjectCatalog` ada permission khas untuk Admin (fungsi `isAdmin()`)
+- **Group Chat** — Teacher cipta group chat ikut subjek (`create_group_chat_screen.dart`): pilih subjek yang diajar, pilih student yang enrolled dalam subjek tu (checkbox + Select All), masukkan nama group. `chat_screen.dart` papar nama group dalam AppBar & nama pengirim di atas setiap mesej masuk (mod group); `chat_list_screen.dart` papar group chat dengan ikon & nama group berasingan daripada chat 1:1. **Nota:** group TIDAK auto-update bila student baru enrol subjek yang sama selepas group dicipta — perlu Teacher cipta group baru.
+- **Read Receipts & Unread Badge (WhatsApp-style)** — `chats/{chatId}` ada field `lastRead: {uid: Timestamp}` (dikemaskini bila participant buka/lihat chat) dan `unreadCount: {uid: int}` (increment untuk setiap participant lain bila mesej dihantar, reset ke 0 bila dibuka). Setiap mesej yang dihantar oleh current user papar single tick (dah hantar) atau double tick biru (dah dibaca oleh semua participant lain). `chat_list_screen.dart` papar row bold + badge hijau untuk chat yang belum dibaca, dan tick sent/read pada preview mesej terakhir kalau current user ialah penghantar.
+- **Chats sebagai home screen Teacher/Student (✅ redesign)** — `TeacherDashboard`/`StudentDashboard` bukan lagi skrin menu dengan butang "My Chats"/"Chat Saya"; kedua-duanya kini terus papar `ChatListScreen` (dikonfigur dengan warna jenama & Floating Action Button ikut role). AppBar `ChatListScreen` ada tab "All" / "Individual" / "Groups" (filter client-side ikut field `isGroup`) dan indikator jumlah keseluruhan chat belum dibaca (badge hijau "X unread" sebelah tajuk "Chats"). ParentDashboard KEKAL berasingan (tidak digabung dengan chat list) sebab parent chat module belum dibina — rujuk 4.2.
+- **Design refresh (✅)** — palet warna & komponen diselaraskan merentasi semua skrin (`main.dart` ThemeData: Material 3, `ColorScheme.fromSeed`, rounded inputs/buttons/cards) mengikut gaya asal `welcome_screen.dart`; senarai (users, subjects, teachers, chats) kini guna `Card`-wrapped tile dengan empty-state ikon + mesej, bukan `Text` kosong sahaja.
+- **New Chat (cari user) & Profile (✅)** — `user_search_screen.dart` ialah skrin generik cari user ikut role (dipanggil dengan `targetRole`): Student cari Teacher (FAB "Find a Teacher"), Teacher kini juga boleh cari Student (FAB Teacher dashboard buka bottom sheet: "New Chat" vs "New Group"). Setiap row ada ikon info → `user_profile_screen.dart` (avatar, role, email, subjects, butang "Message"). Dalam `chat_screen.dart`, tajuk AppBar (atau ikon info) boleh ditekan untuk buka profile pihak lain (chat 1:1) atau Group Info (chat group).
+- **Group Members: View / Add / Remove (✅)** — `group_info_screen.dart` papar senarai ahli group (nama, avatar, label "Group Admin"). `groupAdmin` (teacher pencipta) boleh buang ahli (`arrayRemove`) atau tambah ahli baru lewat `add_group_members_screen.dart` (senarai student yang enrolled dalam subjek group tapi belum jadi ahli, checkbox multi-select → `arrayUnion`). Ahli biasa (bukan admin) ada butang "Leave Group" untuk buang diri sendiri. **Firestore Rules dikemaskini**: perubahan field `participants` pada chat group hanya dibenarkan untuk `groupAdmin`, ATAU ahli yang buang diri sendiri sahaja (self-leave) — dikuatkuasakan di `firestore.rules` (bukan client-side sahaja).
+- **OS-level unread badge (✅, best-effort)** — `lib/utils/unread_badge.dart` (+ `_stub.dart` / `_web.dart`, conditional export ikut `dart.library.js_interop`) panggil Web Badging API (`navigator.setAppBadge` / `clearAppBadge`) setiap kali jumlah keseluruhan chat belum dibaca berubah dalam `ChatListScreen`, dan clear semasa logout. Ini bagi badge kat icon app macam WhatsApp (bulatan hijau + nombor) kat luar tab/skrin app. **Had:** hanya berkesan di browser Chromium (Chrome/Edge) & bila TuturEdu di-"install" sebagai PWA (`web/manifest.json` dah `display: standalone`) — di browser/konteks lain, fungsi ni silently no-op (feature-detected via `dart:js_interop`, tak crash).
+- **File Upload / Attachment (✅ dikodkan & berfungsi hujung-ke-hujung, rujuk Seksyen 8)** — Butang 📎 dalam `chat_screen.dart` → `FilePicker.pickFiles(withData: true)` → `FileValidator.validate()` (`lib/utils/file_validator.dart`, 3-lapisan: saiz ≤10MB, extension, magic number — rujuk 8.3/8.4) → upload ke Firebase Storage (`chats/{chatId}/attachments/{messageId}_{namaFail}`) dengan progress bar sebenar + timeout 30 saat (elak upload "hang" selama-lamanya kalau ada masalah rangkaian) → mesej dengan `attachmentUrl`/`attachmentType`/`attachmentName`. Bubble papar thumbnail (image, tap → `FullImageScreen` penuh skrin) atau kad ikon+nama (document, tap → buka luar guna `url_launcher`). Firebase Storage project `tuturedu-app` dah **enabled** (bucket `tuturedu-app.firebasestorage.app`, US-EAST1 no-cost location, plan Blaze) & `storage.rules` dah **dideploy**.
 
 ### 4.2 Status: Dalam Reka Bentuk (Figma) — Belum Dikodkan 🔲
 
@@ -171,7 +181,6 @@ Berdasarkan prototype Figma, ciri-ciri berikut telah direka tetapi belum dilaksa
 
 ### 4.3 Status: Belum Dirancang / Cadangan Masa Depan 💡
 
-- Chat list (senarai semua perbualan aktif dalam satu skrin)
 - Push notification sebenar (Firebase Cloud Messaging)
 
 ---
@@ -188,9 +197,9 @@ User buka app
    → FirebaseAuth.signInWithEmailAndPassword()
    → Ambil role dari Firestore (users/{uid})
    → Route mengikut role:
-        - "Teacher" → TeacherDashboard
-        - "Student"  → StudentDashboard
-        - "Parent"   → ParentDashboard
+        - "Teacher" → TeacherDashboard (= ChatListScreen terus, tiada skrin menu butang lagi)
+        - "Student"  → StudentDashboard (= ChatListScreen terus, tiada skrin menu butang lagi)
+        - "Parent"   → ParentDashboard (skrin placeholder, chat module belum dibina)
         - "Admin"    → AdminDashboard   // ✅ ditambah
 ```
 
@@ -214,16 +223,81 @@ Error handling (FirebaseAuthException):
    - "weak-password" → papar mesej password terlalu lemah
 ```
 
-### 5.2 Aliran Mula Chat (Student → Teacher)
+### 5.2 Aliran Mula Chat Baru (Student ↔ Teacher) — ✅ dua-hala
 
 ```
-Student di StudentDashboard
-   → Tekan "Cari Pensyarah"
-   → TeacherListScreen (senarai teacher dari users collection, role == "Teacher")
-   → Student pilih satu teacher
+Student login → terus masuk ChatListScreen (StudentDashboard)
+   → Tekan Floating Action Button "Find a Teacher"
+   → UserSearchScreen(targetRole: "Teacher") (senarai dari users collection, role == "Teacher")
+   → Student pilih satu teacher (tekan row → mula chat terus,
+     ATAU tekan ikon info → UserProfileScreen dulu → tekan "Message")
    → Sistem generate chatId (gabungan uid, disusun abjad)
    → Create/reuse dokumen dalam chats/{chatId}
    → Navigate ke ChatScreen
+
+Teacher login → terus masuk ChatListScreen (TeacherDashboard) → tekan FAB "+"
+   → Bottom sheet: pilih "New Chat" atau "New Group"
+   → "New Chat" → UserSearchScreen(targetRole: "Student") (aliran sama macam atas, terbalik)
+```
+
+### 5.2a Aliran Group Chat (✅ Dikodkan & diintegrasikan)
+
+```
+Teacher login → ChatListScreen (TeacherDashboard) → tekan FAB "+" → "New Group"
+   → CreateGroupChatScreen
+   → Pilih Subject/Level dari senarai subjek yang diajar teacher tu (dropdown)
+   → Sistem query users where role == "Student" AND subjects array-contains subjectLevel
+        - Senarai student yang match subjek tu dipaparkan dengan checkbox
+          (+ butang "Select All" / "Deselect All")
+        - Teacher pilih mana student nak dimasukkan dalam group
+   → Masukkan nama group (contoh "Add Maths Form 4 - Batch A")
+   → Tekan "Create Group"
+        - Teacher (pencipta) turut ditambah sebagai participants + groupAdmin
+   → Create dokumen baru dalam chats/{autoId}:
+        { isGroup: true, chatType: "group", groupName, groupAdmin: teacherUid,
+          subject: subjectLevel, participants: [teacherUid, ...studentUids], lastUpdated }
+   → Navigate ke ChatScreen (mod group)
+
+Dalam ChatScreen (mod group):
+   → AppBar papar groupName (bukan nama individu)
+   → Setiap mesej papar nama pengirim (fetch dari users/{senderId}.name) di atas bubble
+     (beza dari chat 1:1 yang tak perlu papar nama sebab dah jelas 2 orang je)
+   → Semua ahli group nampak & boleh reply dalam satu perbualan yang sama
+   → Office Hour Lock tetap terpakai sama macam chat 1:1
+
+Nota: group chat semasa TIDAK auto-update bila student baru daftar/ambil
+subjek yang sama selepas group dicipta — Teacher boleh tambah ahli manual
+lewat Group Info → "Add" (rujuk 5.2b) atau cipta group baru.
+```
+
+### 5.2b Aliran Group Info & Urus Ahli (✅ Dikodkan & diintegrasikan)
+
+```
+Dalam ChatScreen (mod group) → tekan tajuk AppBar / ikon info
+   → GroupInfoScreen
+        - Papar nama group, subjek, jumlah ahli
+        - Senarai ahli (nama, avatar, label "Group Admin" untuk pencipta)
+        - Tekan mana-mana ahli → UserProfileScreen ahli tu
+
+   Jika current user == groupAdmin:
+        - Setiap ahli lain ada ikon "Remove" → confirm dialog →
+          chats/{chatId}.participants: arrayRemove([uid])
+        - Butang "Add" → AddGroupMembersScreen
+             → Query student yang enrolled dalam subjek group tapi BELUM
+               jadi ahli (subjects array-contains subject, uid not in
+               participants)
+             → Checkbox multi-select → "Add N member(s)" →
+               chats/{chatId}.participants: arrayUnion([...uids])
+
+   Jika current user BUKAN groupAdmin:
+        - Butang "Leave Group" → confirm dialog →
+          chats/{chatId}.participants: arrayRemove([currentUid]) →
+          kembali ke ChatListScreen
+
+Firestore Rules: field `participants` pada dokumen chat hanya boleh
+diubah oleh groupAdmin (bebas ubah), ATAU oleh mana-mana ahli yang
+buang DIRI SENDIRI sahaja (self-leave) — bukan ahli lain. Dikuatkuasakan
+di firestore.rules, bukan client-side sahaja.
 ```
 
 ### 5.3 Aliran Office Hour Lock
@@ -288,7 +362,7 @@ Teacher buka Class Performance Overview
         - (Cadangan) Trigger notification ke Parent & Student berkaitan
 ```
 
-### 5.6 Aliran File Upload / Attachment (✅ Sudah dilaksanakan — client-side)
+### 5.6 Aliran File Upload / Attachment (✅ Dikodkan & berfungsi hujung-ke-hujung)
 
 ```
 User tekan butang attachment (📎) dalam ChatScreen
@@ -315,7 +389,7 @@ User tekan butang attachment (📎) dalam ChatScreen
           (guna url_launcher, buka dalam browser/app luar)
 ```
 
-### 5.7 Aliran Admin: Manage Users & Manage Subjects (✅ Sudah dilaksanakan)
+### 5.7 Aliran Admin: Manage Users (✅ Sudah dilaksanakan) & Manage Subjects (🔲 Kod ditulis, belum diintegrasikan/diuji)
 
 ```
 Admin login → AdminDashboard
@@ -360,7 +434,7 @@ Nota akaun Admin pertama: TIADA pilihan "Admin" dalam RegisterScreen
 
 ```
 lib/
-├── main.dart                            // home: WelcomeScreen
+├── main.dart                            // home: WelcomeScreen; ThemeData/design system dikongsi
 ├── firebase_options.dart
 ├── models/
 │   ├── user_model.dart
@@ -369,19 +443,28 @@ lib/
 │   ├── welcome_screen.dart              // ✅ entry point app, EN
 │   ├── register_screen.dart             // ✅ sign up, EN
 │   ├── login_screen.dart
-│   ├── student_dashboard.dart
-│   ├── teacher_dashboard.dart
-│   ├── parent_dashboard.dart
-│   ├── teacher_list_screen.dart
-│   ├── chat_screen.dart
+│   ├── student_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
+│   ├── teacher_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
+│   ├── parent_dashboard.dart            // placeholder, chat module belum dibina
+│   ├── user_search_screen.dart          // ✅ generik: cari Teacher (Student) atau Student (Teacher), papar profile/mula chat
+│   ├── user_profile_screen.dart         // ✅ profile read-only + butang "Message"
+│   ├── chat_screen.dart                 // ✅ tajuk AppBar boleh tekan → profile (1:1) / group info (group)
+│   ├── chat_list_screen.dart            // ✅ tab All/Individual/Groups + unread badge
+│   ├── create_group_chat_screen.dart     // ✅ Teacher: cipta group chat, EN
+│   ├── group_info_screen.dart           // ✅ senarai ahli group; groupAdmin boleh add/remove, ahli lain boleh "Leave Group"
+│   ├── add_group_members_screen.dart    // ✅ groupAdmin sahaja: tambah ahli baru ke group sedia ada
+│   ├── full_image_screen.dart           // ✅ viewer penuh skrin untuk attachment jenis image (pinch-to-zoom)
 │   ├── admin_dashboard.dart              // ✅ hub Admin, EN
-│   ├── manage_users_screen.dart          // ✅ Admin: CRUD users, EN
+│   ├── manage_users_screen.dart          // ✅ Admin: CRUD users + Edit Subjects, EN
 │   ├── manage_subjects_screen.dart       // ✅ Admin: CRUD subjectCatalog, EN
 │   ├── class_performance_screen.dart   (cadangan — belum wujud)
 │   ├── attendance_overview_screen.dart (cadangan — belum wujud)
 │   └── settings_screen.dart            (cadangan — belum wujud)
 └── utils/
     ├── office_hours.dart
+    ├── unread_badge.dart               // ✅ conditional export (web/stub)
+    ├── unread_badge_stub.dart          // ✅ no-op untuk platform bukan web
+    ├── unread_badge_web.dart           // ✅ Badging API via dart:js_interop
     └── file_validator.dart             // ✅ rujuk Seksyen 8
 
 assets/
@@ -389,11 +472,11 @@ assets/
     └── tuturedu_logo.png               // ✅ didaftar dalam pubspec.yaml
 ```
 
-> **Nota bahasa UI:** `welcome_screen.dart` dan `register_screen.dart` menggunakan Bahasa Inggeris sepenuhnya. `login_screen.dart` dan skrin lain masih campuran/Bahasa Melayu setakat penulisan blueprint ini — perlu diselaraskan (English sepenuhnya, atau dwibahasa secara konsisten) sebagai future cleanup sebelum submission akhir.
+> **Nota bahasa UI:** Semua skrin (`lib/screens/`, `lib/utils/`, `lib/models/`) kini menggunakan Bahasa Inggeris sepenuhnya, termasuk code comments. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matrix") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
 
 ---
 
-## 8. File Upload / Attachment Security (✅ Sudah dilaksanakan — client-side)
+## 8. File Upload / Attachment Security (✅ Dikodkan & berfungsi hujung-ke-hujung)
 
 ### 8.1 Skop
 
@@ -462,19 +545,20 @@ chats/
               └── {messageId}_{namaFailAsal}
 ```
 
-### 8.8 Firebase Storage Security Rules
+### 8.8 Firebase Storage Security Rules (✅ dideploy & disahkan berfungsi)
 
 ```
 match /chats/{chatId}/attachments/{fileName} {
   allow read: if request.auth != null &&
                request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
   allow write: if request.auth != null &&
-                request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants &&
-                request.resource.size < 10 * 1024 * 1024;
+                request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
 }
 ```
 
 > Nota: Storage Rules boleh sekat berdasarkan saiz & content-type asas, tetapi **tidak boleh** baca magic number fail — pengesahan magic number tetap dilakukan di client (`file_validator.dart`), dengan Cloud Function server-side sebagai cadangan masa depan (rujuk 8.5).
+>
+> **Nota penting (dijumpai semasa testing sebenar):** Rule asal ada juga semakan `request.resource.size < 10 * 1024 * 1024`, tapi ini disahkan **rosakkan semua write request** dari Flutter Web app (kemungkinan besar sebab bagaimana resumable upload protocol Firebase Storage hantar metadata saiz — `request.resource.size` tak reliable pada peringkat Rules dinilai). Diuji secara empirikal: buang semakan saiz tu → upload terus berfungsi. Oleh itu had 10MB **hanya** dikuatkuasakan client-side (`file_validator.dart`), bukan dalam Storage Rules — cukup memadai untuk app sebenar (user tak boleh bypass client), walaupun secara teori seseorang yang panggil Storage API terus (bukan melalui app) boleh upload fail lebih besar. Trade-off yang diterima untuk skop projek ni.
 
 ### 8.9 UI Bubble Attachment dalam Chat
 
@@ -483,7 +567,123 @@ match /chats/{chatId}/attachments/{fileName} {
 
 ---
 
-## 9. Status Keseluruhan Pembangunan
+## 9. Interactive Quiz (💡 Cadangan — belum dibina)
+
+Ciri quiz gaya Wayground/Kahoot/Quizizz — teacher cipta quiz dengan soalan aneka pilihan, student jawab. Menyokong **dua mod**: **Live Session** (semua student join serentak dengan join code, real-time, ada leaderboard) dan **Self-Paced** (student buat bila-bila masa sendiri, macam homework).
+
+### 9.1 Skop
+
+- Teacher cipta quiz (tajuk, subjek/tahap, senarai soalan aneka pilihan 4 opsyen)
+- **Live Session**: teacher "host" sesi, dapat join code (contoh 6-digit), student masuk guna code, semua jawab soalan yang sama serentak dengan timer, leaderboard real-time
+- **Self-Paced**: student browse quiz yang available untuk subjek dia, buat sendiri bila-bila, submit, terus dapat markah & boleh review jawapan
+
+### 9.2 Struktur Firestore (Cadangan)
+
+```
+quizzes (collection)
+  └── {quizId}
+        ├── title: string
+        ├── subjectLevel: string          // contoh "Add Maths Form 4", rujuk subjectCatalog
+        ├── createdBy: string             // teacherUid
+        ├── createdAt: timestamp
+        ├── mode: "live" | "self_paced" | "both"
+        └── questions (sub-collection)
+              └── {questionId}
+                    ├── text: string
+                    ├── options: array<string>      // 4 opsyen
+                    ├── correctIndex: number         // index jawapan betul (0-3)
+                    ├── timeLimitSeconds: number      // untuk Live mode, contoh 20
+                    └── points: number                // markah asas per-soalan
+
+quizSessions (collection)                  // hanya untuk mod LIVE
+  └── {sessionId}
+        ├── quizId: string
+        ├── hostUid: string                // teacher yang start sesi
+        ├── joinCode: string               // 6-digit, unik semasa sesi aktif
+        ├── status: "waiting" | "active" | "ended"
+        ├── currentQuestionIndex: number
+        ├── startedAt / endedAt: timestamp
+        └── participants (sub-collection)
+              └── {studentUid}
+                    ├── name: string
+                    ├── score: number
+                    └── answers: map<questionId, { selectedIndex, correct, timeTakenMs }>
+
+quizAttempts (collection)                  // hanya untuk mod SELF-PACED
+  └── {attemptId}
+        ├── quizId: string
+        ├── studentUid: string
+        ├── startedAt / completedAt: timestamp
+        ├── status: "in_progress" | "completed"
+        ├── score: number
+        └── answers: map<questionId, selectedIndex>
+```
+
+### 9.3 Aliran Logik (Cadangan)
+
+**Live Session (Teacher host):**
+```
+Teacher pilih quiz → tekan "Host Live Session"
+   → Create dokumen quizSessions, generate joinCode 6-digit unik
+   → Status "waiting" — papar joinCode besar untuk student masuk
+   → Student masuk join code → tambah diri ke participants sub-collection
+   → Teacher tekan "Start" → status "active", currentQuestionIndex = 0
+   → Setiap soalan: papar dengan timer countdown
+        - Student submit jawapan → update participants/{uid}.answers[questionId]
+        - Markah dikira: correct + speed bonus (jawab lebih cepat = markah lebih tinggi, optional)
+   → Teacher tekan "Next" → currentQuestionIndex + 1, ulang sampai soalan habis
+   → Status "ended" → papar leaderboard akhir (susun ikut score, descending)
+```
+
+**Self-Paced (Student):**
+```
+Student browse senarai quiz (filter ikut subjects dia dalam users/{uid}.subjects)
+   → Pilih quiz → "Start Quiz"
+   → Create dokumen quizAttempts (status "in_progress")
+   → Jawab soalan satu-satu (tiada timer, atau timer longgar optional)
+   → Submit → kira score, update status "completed"
+   → Papar markah & review jawapan (betul/salah setiap soalan)
+```
+
+### 9.4 Firestore Security Rules (Cadangan)
+
+```
+match /quizzes/{quizId} {
+  allow read: if request.auth != null;
+  allow write: if request.auth != null &&
+                (request.auth.uid == resource.data.createdBy || isAdmin());
+  allow create: if request.auth != null &&
+                 request.auth.uid == request.resource.data.createdBy;
+}
+
+match /quizSessions/{sessionId} {
+  allow read: if request.auth != null;
+  allow write: if request.auth != null && request.auth.uid == resource.data.hostUid;
+
+  match /participants/{studentUid} {
+    allow read: if request.auth != null;
+    allow write: if request.auth != null && request.auth.uid == studentUid;
+  }
+}
+
+match /quizAttempts/{attemptId} {
+  allow read, write: if request.auth != null &&
+                       request.auth.uid == resource.data.studentUid;
+  allow create: if request.auth != null &&
+                 request.auth.uid == request.resource.data.studentUid;
+}
+```
+
+### 9.5 Nota Pelaksanaan
+
+- **Real-time sync Live Session** guna Firestore `StreamBuilder` (sama pattern macam Chat) — teacher push `currentQuestionIndex`, semua student listen dan auto-update UI bila soalan bertukar
+- **Join code collision**: semasa generate 6-digit code, elok check dulu takde sesi lain yang aktif dengan code sama (query `quizSessions` where `joinCode == code AND status == "active"`)
+- **Leaderboard** boleh dikira on-the-fly dari `participants` sub-collection (sort by `score` descending) — tak perlu simpan leaderboard berasingan
+- Ciri ni **belum masuk timeline semasa** — akan diletak dalam Gantt chart bila kau ready nak mula (cadangan: lepas Quick Reply chips & Class Performance, sebelum Attendance/Parent module, sebab quiz lebih "core" untuk value proposition app berbanding attendance)
+
+---
+
+## 10. Status Keseluruhan Pembangunan
 
 - [x] Welcome / Landing screen (EN)
 - [x] Register screen (Sign Up, EN) — auto-create Firebase Auth + Firestore profile
@@ -493,20 +693,20 @@ match /chats/{chatId}/attachments/{fileName} {
 - [x] Office hour lock logic (global)
 - [x] Firestore security rules (users & chats)
 - [x] Overtime Mode (Reply Now / Schedule Reply) — client-side, auto-send bila ChatScreen dibuka semula
-- [x] File upload dengan validation 3-lapisan (extension + saiz + magic number) — rujuk Seksyen 8
 - [x] Admin Dashboard (quick stats + navigasi)
 - [x] Manage Users (Admin: search, filter, tukar role, delete)
-- [x] Manage Subjects (Admin: CRUD subjectCatalog)
+- [x] Manage Subjects (Admin: CRUD subjectCatalog) — kod ditulis, belum diintegrasikan/diuji
+- [x] Group Chat (teacher cipta group ikut subjek, pilih student secara manual)
+- [x] File upload dengan validation 3-lapisan (extension + saiz + magic number) — rujuk Seksyen 8. Firebase Storage dah enabled & berfungsi hujung-ke-hujung
 - [ ] Quick Reply chips
+- [ ] Interactive Quiz (Live Session + Self-Paced) — rujuk Seksyen 9
 - [ ] On-Duty/Off-Duty manual toggle
 - [ ] Class Performance Overview + Warning Letter system
 - [ ] Attendance Overview (Student)
 - [ ] Modul Parent (chat + monitoring)
-- [ ] Chat list (senarai perbualan aktif)
+- [x] Chat list (senarai perbualan aktif)
 - [ ] Push notification (FCM)
 - [ ] Full Admin account deletion (padam akaun Firebase Authentication, perlukan Cloud Function/Admin SDK)
-- [ ] Selaraskan bahasa UI merentasi semua skrin (sesetengah masih Bahasa Melayu, welcome/register/admin dah English)
-
 ---
 
 *Dokumen ini adalah rujukan hidup — kemas kini bila ciri baru siap dilaksanakan atau reka bentuk berubah.*

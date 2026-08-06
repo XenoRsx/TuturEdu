@@ -1,14 +1,14 @@
 // lib/utils/office_hours.dart
 //
-// Helper untuk check sama ada masa sekarang dalam office hour atau tidak.
-// Setting global: Isnin - Jumaat, 9:00 - 17:00 (boleh ubah kat bawah).
+// Helper to check whether the current time falls within office hours.
+// Global setting: Monday - Friday, 8:00 - 18:00 (adjustable below).
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 class OfficeHours {
-  // ----- SETTING BOLEH UBAH DI SINI -----
-  static const int startHour = 11;
-  static const int endHour = 17; // (24-hour format)
+  // ----- ADJUSTABLE SETTINGS -----
+  static const int startHour = 8;
+  static const int endHour = 18; // (24-hour format)
   static const List<int> workingDays = [
     DateTime.monday,
     DateTime.tuesday,
@@ -18,31 +18,31 @@ class OfficeHours {
   ];
   // ----------------------------------------
 
-  // ----- DEBUG BYPASS (untuk testing sahaja) -----
-  // Set true untuk force chat SENTIASA terbuka semasa testing.
-  // SELAMAT: sebab dibalut dengan kDebugMode, flag ni automatik jadi `false`
-  // dalam production build (flutter build web / apk --release), walaupun
-  // kau lupa tukar balik ke `false` sebelum deploy.
-  static bool debugForceOpen = false;
+  // ----- DEBUG BYPASS (testing only) -----
+  // Set to true to force chat to ALWAYS be open during testing.
+  // SAFE: since it's wrapped in kDebugMode, this flag automatically becomes
+  // `false` in a production build (flutter build web / apk --release), even
+  // if you forget to flip it back before deploying.
+  static bool debugForceOpen = true;
   // -------------------------------------------------
 
-  /// Return true kalau masa sekarang dalam office hour.
+  /// Returns true if the current time is within office hours.
   static bool isOfficeHourNow() {
     if (kDebugMode && debugForceOpen) return true;
     final now = DateTime.now();
     return isWithinOfficeHour(now);
   }
 
-  /// Boleh test dengan DateTime tertentu (senang untuk testing/debug).
+  /// Test against a specific DateTime (handy for testing/debug).
   static bool isWithinOfficeHour(DateTime dateTime) {
     final isWorkingDay = workingDays.contains(dateTime.weekday);
     final isWithinHour = dateTime.hour >= startHour && dateTime.hour < endHour;
     return isWorkingDay && isWithinHour;
   }
 
-  /// Text untuk tunjuk kat UI (contoh dalam banner "Chat locked")
+  /// Text to display in the UI (e.g. in the "Chat locked" banner).
   static String officeHourText() {
-    return 'Isnin - Jumaat, ${_formatHour(startHour)} - ${_formatHour(endHour)}';
+    return 'Monday - Friday, ${_formatHour(startHour)} - ${_formatHour(endHour)}';
   }
 
   static String _formatHour(int hour) {
@@ -51,7 +51,7 @@ class OfficeHours {
     return '$displayHour:00 $period';
   }
 
-  /// Bila office hour seterusnya akan buka (untuk UI, contoh "Buka semula pada...")
+  /// When office hours will next open (for UI text, e.g. "Reopens on...").
   static String nextOpenText() {
     final target = nextOpenDateTime();
     final now = DateTime.now();
@@ -60,27 +60,28 @@ class OfficeHours {
         target.month == now.month &&
         target.day == now.day;
     if (isToday) {
-      return 'Hari ini, ${_formatHour(startHour)}';
+      return 'Today, ${_formatHour(startHour)}';
     }
 
     final dayNames = {
-      DateTime.monday: 'Isnin',
-      DateTime.tuesday: 'Selasa',
-      DateTime.wednesday: 'Rabu',
-      DateTime.thursday: 'Khamis',
-      DateTime.friday: 'Jumaat',
+      DateTime.monday: 'Monday',
+      DateTime.tuesday: 'Tuesday',
+      DateTime.wednesday: 'Wednesday',
+      DateTime.thursday: 'Thursday',
+      DateTime.friday: 'Friday',
     };
     return '${dayNames[target.weekday]}, ${_formatHour(startHour)}';
   }
 
-  /// Kira DateTime sebenar bila office hour seterusnya akan buka.
-  /// Digunakan untuk Overtime Mode - "Schedule Reply for 8:00 AM" (atau
-  /// jam mula office hour semasa) supaya reply auto-hantar bila masa tiba.
+  /// Calculates the actual DateTime when office hours will next open.
+  /// Used for Overtime Mode - "Schedule Reply for 8:00 AM" (or whatever the
+  /// current office-hour start time is), so the reply auto-sends once the
+  /// time arrives.
   static DateTime nextOpenDateTime() {
     final now = DateTime.now();
 
-    // Kalau sekarang masih dalam working day & belum lepas start hour,
-    // office hour akan buka hari ini juga.
+    // If today is still a working day and start hour hasn't passed yet,
+    // office hours will open again today.
     for (int i = 0; i < 8; i++) {
       final candidate = DateTime(
         now.year,
@@ -96,18 +97,19 @@ class OfficeHours {
         startHour,
       );
 
-      // Hari ni & office hour belum start -> ni lah next open time.
+      // Today, and office hours haven't started yet -> this is the next open time.
       if (i == 0 && now.hour < startHour) return openTime;
 
-      // Hari ni & sekarang sebenarnya dalam office hour -> tak patut sampai
-      // sini (fungsi ni untuk locked state), tapi jaga-jaga skip ke esok.
+      // Today, and we're actually still within office hours -> shouldn't
+      // reach here (this function is for the locked state), but skip ahead
+      // to tomorrow just in case.
       if (i == 0 && now.hour < endHour) continue;
 
-      // Hari-hari selepas ni (i >= 1) semestinya candidate untuk next open.
+      // Any day after today (i >= 1) is necessarily a candidate for next open.
       if (i >= 1) return openTime;
     }
 
-    // Fallback (tak sepatutnya sampai sini)
+    // Fallback (should never be reached)
     return DateTime(now.year, now.month, now.day + 1, startHour);
   }
 }

@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Firebase Storage rules for chat attachments.
+// Mirrors firestore.rules' chat access model: only a chat's participants
+// may read/write its attachments. Storage rules can check size and
+// content-type, but CANNOT read a file's magic number - that validation
+// happens client-side in lib/utils/file_validator.dart before upload (see
+// BLUEPRINT.md section 8.5 for the client-side vs server-side trade-off).
+//
+// Note: deliberately NOT checking request.resource.size here. Confirmed by
+// testing that it makes this rule evaluate to false for every write from
+// the Flutter Web app (likely a resumable-upload quirk where size isn't
+// reliably available at the point Rules run) - the exact same request
+// succeeds once the size check is removed. The 10MB limit is already
+// enforced client-side in file_validator.dart before upload starts, so
+// this isn't a real gap for the app itself, just for anyone bypassing the
+// app entirely - acceptable trade-off for this project.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /chats/{chatId}/attachments/{fileName} {
+      allow read: if request.auth != null &&
+                   request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+
+      allow write: if request.auth != null &&
+                    request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+
+      allow delete: if false;
+    }
+  }
+}

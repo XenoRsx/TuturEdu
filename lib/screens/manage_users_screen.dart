@@ -1,13 +1,13 @@
 // lib/screens/manage_users_screen.dart
 //
-// Admin screen: senarai semua user dalam sistem. Admin boleh:
-// - Tukar role user (contoh: silap daftar sebagai Student, tukar jadi Teacher)
-// - Padam akaun (buang dari Firestore users collection)
+// Admin screen: list of all users in the system. Admin can:
+// - Change a user's role (e.g. accidentally registered as Student, change to Teacher)
+// - Delete an account (removes it from the Firestore users collection)
 //
-// Nota: Padam di sini hanya buang dokumen Firestore, BUKAN akaun Firebase
-// Authentication (perlu Admin SDK/Cloud Function untuk itu - rujuk nota
-// dalam _deleteUser). Untuk MVP, ini memadai untuk "deactivate" secara
-// praktikal (user tak boleh login dengan role yang sah lagi).
+// Note: Delete here only removes the Firestore document, NOT the Firebase
+// Authentication account (that needs Admin SDK/Cloud Function - see the note
+// in _deleteUser). For MVP purposes, this is enough to effectively
+// "deactivate" a user (they can no longer log in with a valid role).
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -60,6 +60,79 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             child: const Text('Save'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _editSubjects(String uid, List<String> currentSubjects) async {
+    final catalogSnapshot = await FirebaseFirestore.instance
+        .collection('subjectCatalog')
+        .orderBy('name')
+        .get();
+    final allSubjects = catalogSnapshot.docs
+        .map((doc) => (doc.data())['name'] as String? ?? '')
+        .where((name) => name.isNotEmpty)
+        .toList();
+
+    if (!mounted) return;
+
+    if (allSubjects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Subject catalog is empty. Add subjects in "Manage Subjects" first.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final selected = Set<String>.from(currentSubjects);
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Subjects'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: allSubjects.map((subject) {
+                final checked = selected.contains(subject);
+                return CheckboxListTile(
+                  value: checked,
+                  title: Text(subject),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      if (value == true) {
+                        selected.add(subject);
+                      } else {
+                        selected.remove(subject);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .update({'subjects': selected.toList()});
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -123,7 +196,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   decoration: const InputDecoration(
                     hintText: 'Search by name...',
                     prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
                   ),
                   onChanged: (value) =>
                       setState(() => _searchQuery = value.toLowerCase()),
@@ -169,10 +241,20 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 }).toList();
 
                 if (users.isEmpty) {
-                  return const Center(child: Text('No users found.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.people_outline, size: 56, color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text('No users found.', style: TextStyle(color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  );
                 }
 
                 return ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   itemCount: users.length,
                   itemBuilder: (context, index) {
                     final doc = users[index];
@@ -180,8 +262,12 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     final name = data['name'] ?? 'Unnamed';
                     final email = data['email'] ?? '';
                     final role = data['role'] ?? 'Student';
+                    final subjects = List<String>.from(data['subjects'] ?? []);
 
-                    return ListTile(
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                       leading: CircleAvatar(
                         backgroundColor: _roleColor(role).withValues(alpha: 0.15),
                         child: Text(
@@ -189,8 +275,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           style: TextStyle(color: _roleColor(role)),
                         ),
                       ),
-                      title: Text(name),
-                      subtitle: Text(email),
+                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        (role == 'Teacher' || role == 'Student') && subjects.isNotEmpty
+                            ? '$email\n${subjects.join(', ')}'
+                            : email,
+                      ),
+                      isThreeLine:
+                          (role == 'Teacher' || role == 'Student') && subjects.isNotEmpty,
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -206,14 +298,27 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           PopupMenuButton<String>(
                             onSelected: (value) {
                               if (value == 'role') _changeRole(doc.id, role);
+                              if (value == 'subjects') _editSubjects(doc.id, subjects);
                               if (value == 'delete') _deleteUser(doc.id, name);
                             },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(value: 'role', child: Text('Change Role')),
-                              PopupMenuItem(value: 'delete', child: Text('Delete User')),
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'role',
+                                child: Text('Change Role'),
+                              ),
+                              if (role == 'Teacher' || role == 'Student')
+                                const PopupMenuItem(
+                                  value: 'subjects',
+                                  child: Text('Edit Subjects'),
+                                ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete User'),
+                              ),
                             ],
                           ),
                         ],
+                      ),
                       ),
                     );
                   },

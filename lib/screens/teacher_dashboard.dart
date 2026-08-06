@@ -1,57 +1,80 @@
+// lib/screens/teacher_dashboard.dart
+//
+// A Teacher's home screen is the chat list itself (no button-menu step in
+// front of it) - this just configures ChatListScreen with the teacher's
+// brand color and a FAB that offers "New Chat" (search students) or
+// "New Group" (create a group chat).
+
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'login_screen.dart';
 import 'chat_list_screen.dart';
+import 'create_group_chat_screen.dart';
+import 'user_search_screen.dart';
 
 class TeacherDashboard extends StatelessWidget {
   const TeacherDashboard({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Teacher Dashboard'),
-        backgroundColor: Colors.green,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (!context.mounted) return;
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-            },
-          ),
-        ],
+  void _openNewChatMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      body: Center(
+      builder: (sheetContext) => SafeArea(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Selamat Datang, Teacher! (Menu Utama TuturEdu)',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1A1B8E5A),
+                child: Icon(Icons.person_add_alt, color: Colors.green),
+              ),
+              title: const Text('New Chat'),
+              subtitle: const Text('Search a student and start a 1:1 chat'),
+              onTap: () {
+                Navigator.pop(sheetContext);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ChatListScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const UserSearchScreen(
+                      targetRole: 'Student',
+                      title: 'Find a Student',
+                      accentColor: Colors.green,
+                    ),
+                  ),
                 );
               },
-              icon: const Icon(Icons.chat),
-              label: const Text('Chat Saya'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
             ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1A1B8E5A),
+                child: Icon(Icons.group_add, color: Colors.green),
+              ),
+              title: const Text('New Group'),
+              subtitle: const Text('Create a group chat for a subject/class'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CreateGroupChatScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChatListScreen(
+      appBarColor: Colors.green,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openNewChatMenu(context),
+        backgroundColor: Colors.green,
+        child: const Icon(Icons.add),
       ),
     );
   }

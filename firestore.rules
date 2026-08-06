@@ -28,10 +28,25 @@ service cloud.firestore {
     }
 
     // Collection: chats
-    // - Hanya participant (student/teacher yang terlibat) boleh read/write chat tu
+    // - Hanya participant (student/teacher yang terlibat) boleh read chat tu
+    // - Update dibenarkan untuk mana-mana participant, KECUALI perubahan pada
+    //   senarai `participants` (ahli group) - itu hanya untuk groupAdmin, atau
+    //   member biasa yang buang diri sendiri sahaja ("Leave Group")
+    // - Delete tidak dibenarkan langsung (tiada UI padam chat)
     match /chats/{chatId} {
-      allow read, write: if request.auth != null &&
-                          request.auth.uid in resource.data.participants;
+      allow read: if request.auth != null &&
+                   request.auth.uid in resource.data.participants;
+
+      allow update: if request.auth != null &&
+                     request.auth.uid in resource.data.participants &&
+                     (
+                       !request.resource.data.diff(resource.data).affectedKeys().hasAny(['participants']) ||
+                       (resource.data.isGroup == true && resource.data.groupAdmin == request.auth.uid) ||
+                       (resource.data.isGroup == true &&
+                        request.resource.data.participants == resource.data.participants.removeAll([request.auth.uid]))
+                     );
+
+      allow delete: if false;
 
       // Untuk create chat baru (document belum wujud lagi)
       allow create: if request.auth != null &&

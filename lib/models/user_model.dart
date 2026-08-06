@@ -1,12 +1,12 @@
 class UserModel {
   final String uid;
   final String email;
-  final String role; // 'Teacher', 'Student', atau 'Parent'
+  final String role; // 'Teacher', 'Student', or 'Parent'
   final String name;
 
-  // Untuk Teacher: senarai kelas yang diajar, contoh: ["Add Maths Form 4", "Physics Form 5"]
-  // Untuk Student: senarai kelas yang diambil, contoh: ["Add Maths Form 4"]
-  // Untuk Parent: tidak digunakan (kosong)
+  // For Teacher: list of classes taught, e.g.: ["Add Maths Form 4", "Physics Form 5"]
+  // For Student: list of classes enrolled, e.g.: ["Add Maths Form 4"]
+  // For Parent: not used (empty)
   final List<String> subjects;
 
   UserModel({
@@ -17,7 +17,7 @@ class UserModel {
     this.subjects = const [],
   });
 
-  // Fungsi untuk tukar data format Map dari Firestore kepada Object Model Dart
+  // Converts a Firestore Map into this Dart model object
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       uid: map['uid'] ?? '',
@@ -28,7 +28,7 @@ class UserModel {
     );
   }
 
-  // Fungsi kalau kita nak hantar balik data model ni ke format Map Firestore
+  // Converts this model back into a Firestore-compatible Map
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,

@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../main.dart' show kBrandBlue, kBrandGreen, kInkDark, kInkMuted;
 import 'login_screen.dart';
 import 'student_dashboard.dart';
 import 'teacher_dashboard.dart';
@@ -130,102 +131,152 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sign Up'),
-        backgroundColor: Colors.blue,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Create a New Account',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 24),
-
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Full Name',
-                border: OutlineInputBorder(),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFF4FAF7), Color(0xFFEAF3FB)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: kInkDark),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Create a New Account',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: kInkDark,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Join TuturEdu in a few seconds',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, color: kInkMuted),
+                        ),
+                        const SizedBox(height: 24),
 
-            TextField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
+                        TextField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Full Name',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
 
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Password (min. 6 characters)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
+                        TextField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
 
-            TextField(
-              controller: _confirmPasswordController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Confirm Password',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 14),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Password (min. 6 characters)',
+                            prefixIcon: Icon(Icons.lock_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedRole,
-              decoration: const InputDecoration(
-                labelText: 'Register As',
-                border: OutlineInputBorder(),
-              ),
-              items: _roles
-                  .map((role) => DropdownMenuItem(value: role, child: Text(role)))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => _selectedRole = value);
-              },
-            ),
-            const SizedBox(height: 28),
+                        TextField(
+                          controller: _confirmPasswordController,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Confirm Password',
+                            prefixIcon: Icon(Icons.lock_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
 
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _register,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                      ),
-                      child: const Text(
-                        'Sign Up',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedRole,
+                          decoration: const InputDecoration(
+                            labelText: 'Register As',
+                            prefixIcon: Icon(Icons.badge_outlined),
+                          ),
+                          items: _roles
+                              .map((role) => DropdownMenuItem(value: role, child: Text(role)))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) setState(() => _selectedRole = value);
+                          },
+                        ),
+                        const SizedBox(height: 24),
+
+                        SizedBox(
+                          height: 52,
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : ElevatedButton(
+                                  onPressed: _register,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: kBrandGreen,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: const Text(
+                                    'Sign Up',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            );
+                          },
+                          style: TextButton.styleFrom(foregroundColor: kBrandBlue),
+                          child: const Text('Already have an account? Log In'),
+                        ),
+                      ],
                     ),
                   ),
-            const SizedBox(height: 14),
-
-            TextButton(
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              },
-              child: const Text('Already have an account? Log In'),
-            ),
-          ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );

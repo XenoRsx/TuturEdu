@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
 import 'teacher_dashboard.dart';
 import 'student_dashboard.dart';
 import 'parent_dashboard.dart';
@@ -21,21 +22,21 @@ class _LoginScreenState extends State<LoginScreen> {
   void _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sila isi email dan password!')),
+        const SnackBar(content: Text('Please enter your email and password!')),
       );
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      // 1. Login guna Firebase Auth
+      // 1. Sign in with Firebase Auth
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
 
-      // 2. Ambil data role daripada Cloud Firestore
+      // 2. Fetch the role from Cloud Firestore
       DocumentSnapshot userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -46,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
 
-        // 3. Hantar user ke Dashboard mengikut role masing-masing
+        // 3. Route the user to the dashboard matching their role
         if (role == 'Teacher') {
           Navigator.pushReplacement(
             context,
@@ -68,15 +69,15 @@ class _LoginScreenState extends State<LoginScreen> {
             MaterialPageRoute(builder: (_) => const AdminDashboard()),
           );
         } else {
-          throw 'Role tidak dikenali dalam sistem.';
+          throw 'Unrecognized role in the system.';
         }
       } else {
-        throw 'Data pengguna tidak dijumpai dalam database. Pastikan akaun dah didaftarkan dalam Firestore.';
+        throw 'User data not found in the database. Make sure the account is registered in Firestore.';
       }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Ralat: ${e.toString()}')));
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -92,57 +93,158 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('TuturEdu Login'),
-        backgroundColor: Colors.blue,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'Selamat Datang',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 30),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFF4FAF7), Color(0xFFEAF3FB)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: kInkDark),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            _isLoading
-                ? const CircularProgressIndicator()
-                : SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    children: [
+                      _buildArenaMatrixBranding(),
+                      const SizedBox(height: 28),
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Welcome back',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: kInkDark,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Log in to continue to your chats',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, color: kInkMuted),
+                            ),
+                            const SizedBox(height: 24),
+                            TextField(
+                              controller: _emailController,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                prefixIcon: Icon(Icons.email_outlined),
+                              ),
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: _passwordController,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline),
+                              ),
+                              obscureText: true,
+                              onSubmitted: (_) => _login(),
+                            ),
+                            const SizedBox(height: 22),
+                            SizedBox(
+                              height: 52,
+                              child: _isLoading
+                                  ? const Center(child: CircularProgressIndicator())
+                                  : ElevatedButton(
+                                      onPressed: _login,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: kBrandBlue,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text(
+                                        'Log In',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: const Text(
-                        'Log Masuk',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ),
+                      const SizedBox(height: 24),
+                    ],
                   ),
-          ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  // Short blurb about Pusat Tuisyen Arena Matrix, the tuition centre this
+  // TuturEdu platform serves. Logo loads from
+  // assets/images/arena_matrix_logo.png - falls back to a placeholder icon
+  // if that file hasn't been added yet (avoids a crash).
+  Widget _buildArenaMatrixBranding() {
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Image.asset(
+            'assets/images/arena_matrix_logo.png',
+            height: 84,
+            width: 84,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              height: 84,
+              width: 84,
+              decoration: BoxDecoration(
+                color: kBrandBlue.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(Icons.school, size: 42, color: kBrandBlue),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Pusat Tuisyen Arena Matrix',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kInkDark),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'TuturEdu is the official chat platform for Pusat Tuisyen Arena '
+          'Matrix, connecting students, parents & tutors in one safe '
+          'conversation space, in line with the tuition centre\'s operating '
+          'hours.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12.5, color: kInkMuted, height: 1.4),
+        ),
+      ],
     );
   }
 }

@@ -1,7 +1,7 @@
 // lib/screens/admin_dashboard.dart
 //
-// Admin dashboard - hub utama untuk admin. Scope semasa: Manage Users
-// dan Manage Subjects (rujuk BLUEPRINT.md untuk full scope cadangan).
+// Admin dashboard - the main hub for admins. Current scope: Manage Users
+// and Manage Subjects (see BLUEPRINT.md for the full proposed scope).
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
