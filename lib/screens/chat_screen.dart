@@ -77,7 +77,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final cached = _senderNameCache[uid];
     if (cached != null) return cached;
 
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     final name = doc.data()?['name'] ?? 'User';
     _senderNameCache[uid] = name;
     return name;
@@ -89,7 +92,9 @@ class _ChatScreenState extends State<ChatScreen> {
     _isOfficeHour = OfficeHours.isOfficeHourNow();
     _loadCurrentUserRole();
 
-    final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.chatId);
+    final chatRef = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(widget.chatId);
 
     // Read-only: mirrors participants & lastRead into local state so tick
     // marks update live. Never writes back here - writing back would
@@ -106,7 +111,10 @@ class _ChatScreenState extends State<ChatScreen> {
     // Mark read now, and again whenever the messages subcollection changes
     // (i.e. a new message arrives) while this screen stays open.
     _markAsRead();
-    _messagesSub = chatRef.collection('messages').snapshots().listen((_) => _markAsRead());
+    _messagesSub = chatRef
+        .collection('messages')
+        .snapshots()
+        .listen((_) => _markAsRead());
 
     // Check every minute whether office hour status has changed
     // (e.g. user opened the app at 4:59pm, chat should lock at 5:00pm)
@@ -139,10 +147,13 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _markAsRead() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
-    await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).update({
-      'lastRead.${currentUser.uid}': FieldValue.serverTimestamp(),
-      'unreadCount.${currentUser.uid}': 0,
-    });
+    await FirebaseFirestore.instance
+        .collection('chats')
+        .doc(widget.chatId)
+        .update({
+          'lastRead.${currentUser.uid}': FieldValue.serverTimestamp(),
+          'unreadCount.${currentUser.uid}': 0,
+        });
   }
 
   /// Participants list for the chat, used to fan out unread counts when
@@ -252,7 +263,9 @@ class _ChatScreenState extends State<ChatScreen> {
     StreamSubscription<TaskSnapshot>? progressSub;
 
     try {
-      final chatRef = FirebaseFirestore.instance.collection('chats').doc(widget.chatId);
+      final chatRef = FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId);
       // Pre-generate the message ID so the Storage path can embed it, per
       // BLUEPRINT.md 8.7: chats/{chatId}/attachments/{messageId}_{fileName}
       final messageRef = chatRef.collection('messages').doc();
@@ -267,7 +280,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
       progressSub = uploadTask.snapshotEvents.listen((snapshot) {
         if (!mounted || snapshot.totalBytes <= 0) return;
-        setState(() => _uploadProgress = snapshot.bytesTransferred / snapshot.totalBytes);
+        setState(
+          () =>
+              _uploadProgress = snapshot.bytesTransferred / snapshot.totalBytes,
+        );
       });
 
       // Storage calls can hang indefinitely (rather than fail fast) when the
@@ -287,7 +303,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final isOvertimeReply = !officeHourNow && _overtimeActive;
       final attachmentTypeStr =
-          validation.attachmentType == AttachmentType.image ? 'image' : 'document';
+          validation.attachmentType == AttachmentType.image
+          ? 'image'
+          : 'document';
 
       await messageRef.set({
         'senderId': currentUser.uid,
@@ -328,11 +346,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _showAttachmentError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String? _contentTypeFor(String fileName) {
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    final ext = fileName.contains('.')
+        ? fileName.split('.').last.toLowerCase()
+        : '';
     switch (ext) {
       case 'pdf':
         return 'application/pdf';
@@ -359,7 +381,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   IconData _iconForDocument(String fileName) {
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    final ext = fileName.contains('.')
+        ? fileName.split('.').last.toLowerCase()
+        : '';
     switch (ext) {
       case 'pdf':
         return Icons.picture_as_pdf;
@@ -454,9 +478,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Reply scheduled for ${OfficeHours.nextOpenText()}.',
-          ),
+          content: Text('Reply scheduled for ${OfficeHours.nextOpenText()}.'),
         ),
       );
     }
@@ -546,7 +568,8 @@ class _ChatScreenState extends State<ChatScreen> {
         .toList();
     final messageTime = rawTimestamp.toDate();
 
-    final readByAll = otherUids.isNotEmpty &&
+    final readByAll =
+        otherUids.isNotEmpty &&
         otherUids.every((uid) {
           final readTs = _lastRead[uid];
           if (readTs is! Timestamp) return false;
@@ -640,7 +663,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (widget.isGroup) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => GroupInfoScreen(chatId: widget.chatId)),
+        MaterialPageRoute(
+          builder: (_) => GroupInfoScreen(chatId: widget.chatId),
+        ),
       );
     } else if (widget.otherUserUid != null) {
       Navigator.push(
@@ -726,7 +751,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     final rawTimestamp = data['timestamp'];
                     final attachmentUrl = data['attachmentUrl'] as String?;
                     final attachmentType = data['attachmentType'] as String?;
-                    final attachmentName = data['attachmentName'] as String? ?? 'Attachment';
+                    final attachmentName =
+                        data['attachmentName'] as String? ?? 'Attachment';
 
                     return Align(
                       alignment: isMe
@@ -1043,7 +1069,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   )
                 : IconButton(
                     icon: const Icon(Icons.attach_file),
-                    tooltip: 'Send a file (PDF, Word, PowerPoint, Excel, image)',
+                    tooltip:
+                        'Send a file (PDF, Word, PowerPoint, Excel, image)',
                     color: canAttach ? Colors.blue : Colors.grey,
                     onPressed: canAttach ? _pickAndSendAttachment : null,
                   ),
