@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'chat_list_screen.dart';
 import 'create_group_chat_screen.dart';
+import 'quiz_list_screen.dart';
 import 'user_search_screen.dart';
 
 class TeacherDashboard extends StatelessWidget {
@@ -71,6 +72,22 @@ class TeacherDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChatListScreen(
       appBarColor: Colors.green,
+      tabBarTrailing: Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: TextButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const QuizListScreen()),
+            );
+          },
+          icon: const Icon(Icons.quiz_outlined, color: Colors.white, size: 18),
+          label: const Text(
+            'Quizzes',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openNewChatMenu(context),
         backgroundColor: Colors.green,

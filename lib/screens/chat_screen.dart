@@ -168,8 +168,11 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
+  /// Sends the typed message, or [quickReplyText] when tapped from a Quick
+  /// Reply chip instead of the text field.
+  Future<void> _sendMessage({String? quickReplyText}) async {
+    final isQuickReply = quickReplyText != null;
+    final text = isQuickReply ? quickReplyText : _messageController.text.trim();
     if (text.isEmpty) return;
 
     final officeHourNow = OfficeHours.isOfficeHourNow();
@@ -184,7 +187,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    _messageController.clear();
+    if (!isQuickReply) _messageController.clear();
 
     final chatRef = FirebaseFirestore.instance
         .collection('chats')
@@ -198,6 +201,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'text': text,
       'timestamp': FieldValue.serverTimestamp(),
       if (isOvertimeReply) 'isOvertimeReply': true,
+      if (isQuickReply) 'isQuickReply': true,
     });
 
     final chatUpdates = <String, dynamic>{
@@ -835,6 +839,7 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+          _buildQuickReplyChips(),
           _buildInputBar(),
         ],
       ),
@@ -977,6 +982,41 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
       },
+    );
+  }
+
+  static const List<String> _quickReplies = [
+    'OK',
+    'Yes',
+    'No',
+    'Thank you',
+    'Noted',
+    'Please wait',
+  ];
+
+  /// Row of quick-reply chips above the input bar - tapping one sends it
+  /// immediately as a message (tagged `isQuickReply: true`).
+  Widget _buildQuickReplyChips() {
+    final canType = _isOfficeHour || _overtimeActive;
+    if (!canType) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        itemCount: _quickReplies.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
+        itemBuilder: (context, index) {
+          final reply = _quickReplies[index];
+          return ActionChip(
+            label: Text(reply, style: const TextStyle(fontSize: 12.5)),
+            backgroundColor: Colors.blue.shade50,
+            side: BorderSide(color: Colors.blue.shade100),
+            onPressed: () => _sendMessage(quickReplyText: reply),
+          );
+        },
+      ),
     );
   }
 

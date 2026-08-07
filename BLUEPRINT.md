@@ -156,13 +156,15 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Group Members: View / Add / Remove (✅)** — `group_info_screen.dart` papar senarai ahli group (nama, avatar, label "Group Admin"). `groupAdmin` (teacher pencipta) boleh buang ahli (`arrayRemove`) atau tambah ahli baru lewat `add_group_members_screen.dart` (senarai student yang enrolled dalam subjek group tapi belum jadi ahli, checkbox multi-select → `arrayUnion`). Ahli biasa (bukan admin) ada butang "Leave Group" untuk buang diri sendiri. **Firestore Rules dikemaskini**: perubahan field `participants` pada chat group hanya dibenarkan untuk `groupAdmin`, ATAU ahli yang buang diri sendiri sahaja (self-leave) — dikuatkuasakan di `firestore.rules` (bukan client-side sahaja).
 - **OS-level unread badge (✅, best-effort)** — `lib/utils/unread_badge.dart` (+ `_stub.dart` / `_web.dart`, conditional export ikut `dart.library.js_interop`) panggil Web Badging API (`navigator.setAppBadge` / `clearAppBadge`) setiap kali jumlah keseluruhan chat belum dibaca berubah dalam `ChatListScreen`, dan clear semasa logout. Ini bagi badge kat icon app macam WhatsApp (bulatan hijau + nombor) kat luar tab/skrin app. **Had:** hanya berkesan di browser Chromium (Chrome/Edge) & bila TuturEdu di-"install" sebagai PWA (`web/manifest.json` dah `display: standalone`) — di browser/konteks lain, fungsi ni silently no-op (feature-detected via `dart:js_interop`, tak crash).
 - **File Upload / Attachment (✅ dikodkan & berfungsi hujung-ke-hujung, rujuk Seksyen 8)** — Butang 📎 dalam `chat_screen.dart` → `FilePicker.pickFiles(withData: true)` → `FileValidator.validate()` (`lib/utils/file_validator.dart`, 3-lapisan: saiz ≤10MB, extension, magic number — rujuk 8.3/8.4) → upload ke Firebase Storage (`chats/{chatId}/attachments/{messageId}_{namaFail}`) dengan progress bar sebenar + timeout 30 saat (elak upload "hang" selama-lamanya kalau ada masalah rangkaian) → mesej dengan `attachmentUrl`/`attachmentType`/`attachmentName`. Bubble papar thumbnail (image, tap → `FullImageScreen` penuh skrin) atau kad ikon+nama (document, tap → buka luar guna `url_launcher`). Firebase Storage project `tuturedu-app` dah **enabled** (bucket `tuturedu-app.firebasestorage.app`, US-EAST1 no-cost location, plan Blaze) & `storage.rules` dah **dideploy**.
+- **Quick Reply Chips (✅ dikodkan)** — row chip boleh scroll horizontal ("OK", "Yes", "No", "Thank you", "Noted", "Please wait") di atas input bar dalam `chat_screen.dart`, hanya papar bila chat tak locked. Tekan chip terus hantar mesej tu (guna fungsi `_sendMessage` yang sama, parameter `quickReplyText`), ditanda `isQuickReply: true` dalam Firestore.
+- **Interactive Quiz — Live Session (✅ dikodkan, rujuk Seksyen 9)** — Mod Kahoot-style sahaja buat masa ni (Self-Paced belum dibina, rujuk 4.2). Teacher: `quiz_list_screen.dart` ("My Quizzes") → `create_quiz_screen.dart` (tajuk, subjek, soalan aneka pilihan 4 opsyen + time limit + points) → tekan quiz untuk `host_quiz_session_screen.dart` (generate join code 6-digit, waiting room dengan senarai student join secara live, kawal "Next Question"/"End Quiz", leaderboard akhir). Student: FAB "Join a Quiz" → `join_quiz_screen.dart` (masukkan join code) → `live_quiz_play_screen.dart` (StreamBuilder ikut `quizSessions.status`/`currentQuestionIndex`, countdown timer disegerakkan guna `currentQuestionStartedAt`, submit jawapan, leaderboard). Firestore rules ditambah untuk `quizzes`/`quizSessions` (rujuk firestore.rules) — markah dikira & ditulis client-side (had FYP yang sama macam file validation, tiada Cloud Function). UI/UX guna palet vibrant gaya Wayground/Kahoot (`quiz_theme.dart` — 4 warna+bentuk opsyen, gradient ungu, leaderboard podium dikongsi via `quiz_leaderboard_view.dart`).
 
 ### 4.2 Status: Dalam Reka Bentuk (Figma) — Belum Dikodkan 🔲
 
 Berdasarkan prototype Figma, ciri-ciri berikut telah direka tetapi belum dilaksanakan dalam kod:
 
 - **On-Duty / Off-Duty Toggle (Manual)** — teacher boleh tukar status sendiri, bukan hanya bergantung jadual automatik
-- **Quick Reply Chips** — butang pantas dalam chat (contoh: "OK", "Thank you", "Wait") untuk balasan pantas
+- **Interactive Quiz — Self-Paced** — mod kedua dari Seksyen 9 (student buat quiz bila-bila masa macam homework, guna koleksi `quizAttempts`) — belum dibina, Live Session je siap setakat ni
 - **Class Performance Overview** — dashboard teacher memaparkan:
   - Overall class health score (%)
   - Kategori: Safe / At-Risk / Barred
@@ -457,6 +459,12 @@ lib/
 │   ├── admin_dashboard.dart              // ✅ hub Admin, EN
 │   ├── manage_users_screen.dart          // ✅ Admin: CRUD users + Edit Subjects, EN
 │   ├── manage_subjects_screen.dart       // ✅ Admin: CRUD subjectCatalog, EN
+│   ├── create_quiz_screen.dart          // ✅ Teacher: cipta quiz (soalan 4 opsyen)
+│   ├── quiz_list_screen.dart            // ✅ Teacher: "My Quizzes", mula host session
+│   ├── host_quiz_session_screen.dart    // ✅ Teacher: join code, waiting room, kawal soalan, leaderboard
+│   ├── join_quiz_screen.dart            // ✅ Student: masukkan join code
+│   ├── live_quiz_play_screen.dart       // ✅ Student: main quiz real-time, timer, leaderboard
+│   ├── quiz_leaderboard_view.dart       // ✅ widget leaderboard/podium dikongsi host + student
 │   ├── class_performance_screen.dart   (cadangan — belum wujud)
 │   ├── attendance_overview_screen.dart (cadangan — belum wujud)
 │   └── settings_screen.dart            (cadangan — belum wujud)
@@ -465,7 +473,8 @@ lib/
     ├── unread_badge.dart               // ✅ conditional export (web/stub)
     ├── unread_badge_stub.dart          // ✅ no-op untuk platform bukan web
     ├── unread_badge_web.dart           // ✅ Badging API via dart:js_interop
-    └── file_validator.dart             // ✅ rujuk Seksyen 8
+    ├── file_validator.dart             // ✅ rujuk Seksyen 8
+    └── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
 
 assets/
 └── images/
@@ -567,9 +576,9 @@ match /chats/{chatId}/attachments/{fileName} {
 
 ---
 
-## 9. Interactive Quiz (💡 Cadangan — belum dibina)
+## 9. Interactive Quiz (✅ Live Session dikodkan — Self-Paced belum dibina)
 
-Ciri quiz gaya Wayground/Kahoot/Quizizz — teacher cipta quiz dengan soalan aneka pilihan, student jawab. Menyokong **dua mod**: **Live Session** (semua student join serentak dengan join code, real-time, ada leaderboard) dan **Self-Paced** (student buat bila-bila masa sendiri, macam homework).
+Ciri quiz gaya Wayground/Kahoot/Quizizz — teacher cipta quiz dengan soalan aneka pilihan, student jawab. Menyokong **dua mod**: **Live Session** ✅ (semua student join serentak dengan join code, real-time, ada leaderboard — rujuk fail di 4.1) dan **Self-Paced** 🔲 (student buat bila-bila masa sendiri, macam homework — belum dibina).
 
 ### 9.1 Skop
 
@@ -698,8 +707,8 @@ match /quizAttempts/{attemptId} {
 - [x] Manage Subjects (Admin: CRUD subjectCatalog) — kod ditulis, belum diintegrasikan/diuji
 - [x] Group Chat (teacher cipta group ikut subjek, pilih student secara manual)
 - [x] File upload dengan validation 3-lapisan (extension + saiz + magic number) — rujuk Seksyen 8. Firebase Storage dah enabled & berfungsi hujung-ke-hujung
-- [ ] Quick Reply chips
-- [ ] Interactive Quiz (Live Session + Self-Paced) — rujuk Seksyen 9
+- [x] Quick Reply chips
+- [x] Interactive Quiz — Live Session (rujuk Seksyen 9); Self-Paced belum dibina
 - [ ] On-Duty/Off-Duty manual toggle
 - [ ] Class Performance Overview + Warning Letter system
 - [ ] Attendance Overview (Student)

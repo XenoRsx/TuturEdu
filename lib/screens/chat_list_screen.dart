@@ -24,11 +24,13 @@ import 'login_screen.dart';
 class ChatListScreen extends StatefulWidget {
   final Widget? floatingActionButton;
   final Color appBarColor;
+  final Widget? tabBarTrailing;
 
   const ChatListScreen({
     super.key,
     this.floatingActionButton,
     this.appBarColor = Colors.blue,
+    this.tabBarTrailing,
   });
 
   @override
@@ -362,16 +364,26 @@ class _ChatListScreenState extends State<ChatListScreen>
                 onPressed: () => _logout(context),
               ),
             ],
-            bottom: TabBar(
-              controller: _tabController,
-              indicatorColor: Colors.white,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              tabs: const [
-                Tab(text: 'All'),
-                Tab(text: 'Individual'),
-                Tab(text: 'Groups'),
-              ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorColor: Colors.white,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white70,
+                      tabs: const [
+                        Tab(text: 'All'),
+                        Tab(text: 'Individual'),
+                        Tab(text: 'Groups'),
+                      ],
+                    ),
+                  ),
+                  if (widget.tabBarTrailing != null) widget.tabBarTrailing!,
+                ],
+              ),
             ),
           ),
           body: TabBarView(

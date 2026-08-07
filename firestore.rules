@@ -80,5 +80,58 @@ service cloud.firestore {
                        resource.data.senderId == request.auth.uid;
       }
     }
+
+    // Collection: quizzes (Interactive Quiz - Live Session, rujuk BLUEPRINT.md Seksyen 9)
+    // - Sesiapa yang login boleh baca (perlu untuk student main quiz)
+    // - Hanya pencipta (Teacher) boleh cipta/edit/padam quiz dia sendiri
+    match /quizzes/{quizId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+                     request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if request.auth != null &&
+                              request.auth.uid == resource.data.createdBy;
+
+      // Sub-collection: questions
+      // Nota 1: correctIndex boleh dibaca oleh sesiapa yang login - perlu
+      // sebab markah dikira client-side semasa main (tiada Cloud Function
+      // untuk sembunyikan jawapan betul sehingga selepas dijawab). Had FYP
+      // semasa, diterima sebagai trade-off - rujuk BLUEPRINT.md 8.5 untuk
+      // nota serupa pasal client-side vs server-side validation.
+      // Nota 2: `createdBy` di-denormalize terus pada setiap question doc
+      // (bukan get() ke parent quiz) sebab quiz + questions dicipta dalam
+      // SATU batch write - get() ke parent akan gagal masa tu sebab
+      // dokumen parent belum "wujud" lagi pada waktu rules dinilai untuk
+      // write lain dalam batch yang sama.
+      match /questions/{questionId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null &&
+                       request.auth.uid == request.resource.data.createdBy;
+        allow update, delete: if request.auth != null &&
+                                request.auth.uid == resource.data.createdBy;
+      }
+    }
+
+    // Collection: quizSessions (Live Session sahaja)
+    // - Sesiapa yang login boleh baca (student perlu tengok status/currentQuestionIndex)
+    // - Hanya host (teacher yang start sesi) boleh cipta/kemaskini sesi dia sendiri
+    match /quizSessions/{sessionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+                     request.auth.uid == request.resource.data.hostUid;
+      allow update: if request.auth != null &&
+                     request.auth.uid == resource.data.hostUid;
+      allow delete: if false;
+
+      // Sub-collection: participants
+      // - Student cipta/kemaskini dokumen DIA SENDIRI sahaja (nama, score,
+      //   jawapan) - had FYP: score dikira & ditulis client-side, tiada
+      //   pengesahan server (sama trade-off macam questions.correctIndex di atas)
+      match /participants/{studentUid} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null &&
+                                request.auth.uid == studentUid;
+        allow delete: if false;
+      }
+    }
   }
 }
