@@ -29,7 +29,9 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - Parent Module — Admin links a Parent account to a Student account; the parent then gets a real chat-list dashboard (message any teacher), a read-only "My Child" view (attendance + performance), and a Warning Letters inbox they can mark as read
 - Admin Dashboard — manage user accounts (view, change role, remove), manage the subject/level catalog, and a Reports screen with live system-wide stats (users, chats, quizzes, attempts, warning letters)
 - Push Notifications — a Cloud Function sends a real push notification on new chat messages and new warning letters, delivered even when the app isn't open. Live on Web (VAPID key configured and deployed) — see BLUEPRINT.md 5.12.
-- Settings — every role gets Edit Profile, Change Password (re-authenticates first), a Push Notifications on/off toggle, Log Out, and self-service Delete Account (re-authenticates, then removes their own Firestore profile and Firebase Auth account — no Cloud Function needed for deleting your *own* account, unlike Admin deleting someone else's). Teachers additionally get Leave/Holiday dates, which auto-lock their chats for that date range on top of the manual On-Duty/Off-Duty toggle.
+- Settings — every role gets Edit Profile, Change Password (re-authenticates first), a Push Notifications on/off toggle, a choice of 3 notification sounds, Log Out, and self-service Delete Account (re-authenticates, then removes their own Firestore profile and Firebase Auth account — no Cloud Function needed for deleting your *own* account, unlike Admin deleting someone else's). Teachers additionally get Leave/Holiday dates, which auto-lock their chats for that date range on top of the manual On-Duty/Off-Duty toggle.
+- Notification Sound — pick from 3 sounds in Settings ("Marimba" by default); plays on foreground pushes on every platform, and on background/system pushes on Android specifically (the sound files are bundled as Android raw resources and the Cloud Function sets them per-recipient — Web Push has no cross-browser way to customize background notification sound).
+- Android — a release APK builds and installs correctly (`flutter build apk --release`), with TuturEdu's own launcher icon instead of the Flutter default. Not yet Play-Store-ready (still the placeholder `com.example.tuturedu` package name and debug signing), but fine for sideloading/demo.
 - OS-level unread app badge (best-effort, Chromium/PWA only)
 - Firestore & Storage Security Rules — each conversation/attachment can only be accessed by its participants; admin actions are restricted to accounts with the Admin role
 
@@ -80,20 +82,27 @@ lib/
 │   ├── child_overview_screen.dart    # Parent: read-only attendance + performance for linked child
 │   ├── parent_warning_letters_screen.dart # Parent: warning letters for their child, mark as read
 │   ├── admin_reports_screen.dart     # Admin: system-wide stats (count aggregation queries)
-│   └── settings_screen.dart          # All roles: profile, password, push toggle, leave dates (Teacher), logout, delete account
+│   └── settings_screen.dart          # All roles: profile, password, push toggle, sound, leave dates (Teacher), logout, delete account
 └── utils/
     ├── office_hours.dart             # Business hour check logic
     ├── unread_badge.dart             # OS-level badge, conditional export (web/stub)
     ├── file_validator.dart           # File upload validation (size + extension + magic number)
     ├── quiz_theme.dart               # Shared Kahoot/Wayground-style color+shape palette for the Quiz module
-    └── push_notifications.dart       # Register/unregister this device's FCM token
+    ├── push_notifications.dart       # Register/unregister this device's FCM token
+    └── notification_sounds.dart      # The 3 sound options + playback (audioplayers)
+
+assets/sounds/                        # option1_pop.mp3, option2_marimba.mp3 (default), option3_double_tap.mp3
 
 web/
 └── firebase-messaging-sw.js          # Service worker required for Web Push
 
 functions/                            # Separate Node.js project (not Dart/Flutter)
 ├── package.json                      # firebase-admin, firebase-functions v2
-└── index.js                          # onNewChatMessage + onNewWarningLetter triggers
+└── index.js                          # onNewChatMessage + onNewWarningLetter triggers (sets android.notification.sound per recipient)
+
+android/app/src/main/res/
+├── mipmap-*/ic_launcher.png          # TuturEdu launcher icon (replaces the Flutter default)
+└── raw/                              # Copies of assets/sounds/*.mp3, referenced by the Cloud Function for background notification sound
 ```
 
 ## Firestore
@@ -113,7 +122,8 @@ users (collection)
         ├── dutyStatus (optional)     # Teacher only - "on_duty" | "off_duty", manual toggle; missing = on_duty
         ├── fcmTokens (optional)      # array<string> - push notification device tokens (can be >1)
         ├── pushEnabled (optional)    # boolean - Settings preference; missing = enabled
-        └── leaveStart / leaveEnd (optional) # Teacher only - leave/holiday date range, auto Off-Duty for it (Settings)
+        ├── leaveStart / leaveEnd (optional) # Teacher only - leave/holiday date range, auto Off-Duty for it (Settings)
+        └── notificationSound (optional) # "option1_pop" | "option2_marimba" | "option3_double_tap"; missing = option2_marimba
 
 subjectCatalog (collection)
   └── {autoId}
@@ -222,7 +232,15 @@ firebase deploy --only functions
 
 The first-ever deploy of 2nd-gen Cloud Functions on a project can fail once with an Eventarc IAM propagation error — just retry the deploy after a minute, as the error message itself suggests.
 
-**Web Push VAPID key:** already generated and configured in `_webVapidKey` (`lib/utils/push_notifications.dart`) — that key can only be generated by a human in Firebase Console (Project Settings → Cloud Messaging → Web configuration → "Generate key pair"), no CLI equivalent exists, so keep this in mind if the project ever needs a new one. Android/iOS don't need this step, but haven't been built/tested in this project yet — all deploys so far have been `flutter build web`.
+**Web Push VAPID key:** already generated and configured in `_webVapidKey` (`lib/utils/push_notifications.dart`) — that key can only be generated by a human in Firebase Console (Project Settings → Cloud Messaging → Web configuration → "Generate key pair"), no CLI equivalent exists, so keep this in mind if the project ever needs a new one.
+
+## Build (Android)
+
+```bash
+flutter build apk --release
+```
+
+Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by sideloading (copy to a phone and open it, or `adb install` with a device connected). Not set up for Play Store distribution yet: `applicationId` is still the placeholder `com.example.tuturedu` and the release build is signed with the debug key. iOS hasn't been built/tested in this project.
 
 ## Development Status
 
@@ -247,7 +265,9 @@ The first-ever deploy of 2nd-gen Cloud Functions on a project can fail once with
 - [x] Interactive Quiz — Self-Paced (homework mode)
 - [x] Admin Reports (real system-wide stats)
 - [x] Push notifications (Cloud Functions deployed and live, including Web — VAPID key configured)
-- [x] Settings (Edit Profile, Change Password, push toggle, Log Out, self-service Delete Account, Teacher Leave/Holiday dates)
+- [x] Settings (Edit Profile, Change Password, push toggle, notification sound, Log Out, self-service Delete Account, Teacher Leave/Holiday dates)
+- [x] Notification Sound (3 options, foreground on every platform, background/system on Android)
+- [x] Android release APK (own launcher icon; package name/signing still placeholders, fine for sideload/demo, not Play-Store-ready)
 - [ ] Full Admin account deletion (needs a Cloud Function — the `functions/` project now exists from push notifications, so this is easier to add going forward; different from the self-service Delete Account above, which needs no Cloud Function)
 
 ## Author

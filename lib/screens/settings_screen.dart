@@ -9,6 +9,9 @@
 //   automatic office-hour schedule. Consumed by chat_screen.dart's
 //   _computeIsOfficeHour() via the same live teacher-duty listener.
 // - Push Notifications on/off (users/{uid}.pushEnabled)
+// - Notification Sound (users/{uid}.notificationSound, one of 3 options in
+//   assets/sounds/ - default "Marimba" if unset, see lib/utils/
+//   notification_sounds.dart and BLUEPRINT.md 5.15)
 // - Log Out
 // - Delete Account (self-service - re-authenticates, then deletes the
 //   Firestore profile and the Firebase Auth account itself. Firebase lets a
@@ -22,6 +25,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
+import '../utils/notification_sounds.dart';
 import '../utils/push_notifications.dart';
 import 'login_screen.dart';
 import 'welcome_screen.dart';
@@ -224,6 +228,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ----- Notification sound -----
+  Future<void> _selectSound(String soundId) async {
+    await _userRef.update({'notificationSound': soundId});
+    await playNotificationSound(soundId);
+  }
+
   // ----- Log out -----
   Future<void> _logout() async {
     await unregisterPushToken();
@@ -327,6 +337,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final email = data['email'] ?? _authUser.email ?? '';
           final role = data['role'] ?? '';
           final pushEnabled = data['pushEnabled'] != false;
+          final selectedSound =
+              (data['notificationSound'] as String?) ??
+              defaultNotificationSoundId;
           final leaveStart = (data['leaveStart'] as Timestamp?)?.toDate();
           final leaveEnd = (data['leaveEnd'] as Timestamp?)?.toDate();
 
@@ -440,6 +453,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: const Text('New messages and warning letters'),
                     value: pushEnabled,
                     onChanged: _togglePush,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                _sectionLabel('Notification Sound'),
+                Card(
+                  child: RadioGroup<String>(
+                    groupValue: selectedSound,
+                    onChanged: (value) {
+                      if (value != null) _selectSound(value);
+                    },
+                    child: Column(
+                      children: notificationSoundOptions.map((option) {
+                        return RadioListTile<String>(
+                          value: option.id,
+                          activeColor: kBrandBlue,
+                          title: Text(option.label),
+                          secondary: IconButton(
+                            icon: const Icon(Icons.play_circle_outline),
+                            tooltip: 'Preview',
+                            onPressed: () => playNotificationSound(option.id),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),

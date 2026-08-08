@@ -50,6 +50,7 @@ users (collection)
         ├── fcmTokens: array<string>              // ✅ push notification tokens peranti (boleh > 1 - login banyak device/tab), rujuk 5.12
         ├── pushEnabled: boolean                  // ✅ keutamaan Settings - tiada field = layan sebagai true, rujuk 5.14
         ├── leaveStart / leaveEnd: timestamp       // ✅ untuk Teacher, julat tarikh cuti (Settings) - auto Off-Duty, rujuk 5.14
+        ├── notificationSound: string              // ✅ salah satu "option1_pop"/"option2_marimba"/"option3_double_tap" - tiada field = "option2_marimba" (default), rujuk 5.15
         └── workingHours: { start: string, end: string }  // custom per-teacher (future)
 ```
 
@@ -172,7 +173,9 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Interactive Quiz — Self-Paced (✅ dikodkan, rujuk Seksyen 9.6)** — Teacher pilih mod "Self-Paced"/"Both" semasa cipta quiz. Student: FAB/nav bar "Self-Paced Quizzes" → `self_paced_quiz_list_screen.dart` (senarai quiz untuk subjek dia, badge markah kalau dah submit) → `attempt_quiz_screen.dart` (jawab semua soalan sekali gus, tiada timer, submit sekali sahaja - dwi-mod Attempt/Review dalam satu skrin). `quizAttempts/{quizId}_{studentUid}` (ID deterministik, elak retake & elak keperluan index).
 - **Admin Reports (✅ dikodkan, rujuk Seksyen 5.11)** — `admin_reports_screen.dart` gantikan placeholder "Coming Soon" — statistik sebenar (users ikut role, chats, quizzes, quiz sessions, quiz attempts, warning letters, subjek) guna Firestore `count()` aggregation query, tiada dokumen sebenar dibaca, tiada index baru diperlukan.
 - **Push Notifications (✅ dikodkan & AKTIF sepenuhnya di Web, rujuk Seksyen 5.12)** — Cloud Functions (`functions/index.js`, projek Node.js BARU, infra berasingan dari Flutter/Firestore rules) hantar push notification sebenar bila mesej chat baru dihantar (`onNewChatMessage`) atau warning letter baru dicipta (`onNewWarningLetter`) — Firestore sendiri TAK BOLEH panggil FCM API terus, perlukan konteks server. `lib/utils/push_notifications.dart` daftar/buang token peranti (`users/{uid}.fcmTokens`) pada login/logout. VAPID key Web dah diisi & dideploy.
-- **Settings Screen (✅ dikodkan, rujuk Seksyen 5.14)** — `settings_screen.dart`, boleh diakses semua role (ikon gear dalam nav bar Teacher/Student/Parent, kad menu untuk Admin): Edit Profile (nama), Change Password (perlukan re-auth), Push Notifications on/off (`users/{uid}.pushEnabled`), Log Out, Delete Account (self-service, re-auth + padam dokumen Firestore + akaun Firebase Auth sendiri — BEZA dengan had "Admin Delete User" sebab user padam akaun DIA SENDIRI tak perlukan Admin SDK). Teacher sahaja dapat seksyen tambahan "Leave / Holiday" (julat tarikh cuti, auto Off-Duty untuk tempoh tu — rujuk 5.14).
+- **Settings Screen (✅ dikodkan, rujuk Seksyen 5.14)** — `settings_screen.dart`, boleh diakses semua role (ikon gear dalam nav bar Teacher/Student/Parent, kad menu untuk Admin): Edit Profile (nama), Change Password (perlukan re-auth), Push Notifications on/off (`users/{uid}.pushEnabled`), Notification Sound (3 pilihan, rujuk 5.15), Log Out, Delete Account (self-service, re-auth + padam dokumen Firestore + akaun Firebase Auth sendiri — BEZA dengan had "Admin Delete User" sebab user padam akaun DIA SENDIRI tak perlukan Admin SDK). Teacher sahaja dapat seksyen tambahan "Leave / Holiday" (julat tarikh cuti, auto Off-Duty untuk tempoh tu — rujuk 5.14).
+- **Notification Sound (✅ dikodkan, rujuk Seksyen 5.15)** — 3 fail bunyi (`assets/sounds/`) boleh dipilih dari Settings, "Marimba" (option2) default. Aktif untuk push foreground (semua platform, `audioplayers`) DAN push background/system di Android (fail sama disalin ke `android/app/src/main/res/raw/`, Cloud Function set `android.notification.sound` ikut keutamaan penerima). Web Push tiada sokongan bunyi custom rentas-browser, jadi background push di Web guna bunyi default OS/browser sahaja.
+- **Android App Icon (✅ ditukar)** — ikon launcher (5 densiti mipmap) ditukar dari default Flutter kepada mark "T" TuturEdu (crop sama yang dipakai untuk favicon Web), latar putih. APK release pertama dibina & disahkan (`flutter build apk --release`) — rujuk BLUEPRINT.md nota Android SDK setup lebih awal dalam sesi ni. Nota: `applicationId` masih placeholder `com.example.tuturedu` dan release build guna debug signing key — cukup untuk sideload/demo, TAPI perlu ditukar sebelum publish Play Store sebenar (bukan skop semasa).
 
 ### 4.2 Status: Dalam Reka Bentuk (Figma) — Belum Dikodkan 🔲
 
@@ -774,6 +777,57 @@ rujuk juga 5.7):
      sama macam had sedia ada "Admin Delete User tak sentuh Firebase Auth".
 ```
 
+### 5.15 Aliran Notification Sound (✅ Sudah dilaksanakan)
+
+```
+Sumber: 3 fail .mp3 dalam assets/sounds/ (option1_pop, option2_marimba,
+option3_double_tap) - didaftar dalam pubspec.yaml, dimainkan guna pakej
+`audioplayers`. Semua definisi (id, label, path asset) berpusat dalam
+lib/utils/notification_sounds.dart - satu sumber kebenaran dipakai oleh
+Settings (pilih/preview) DAN main.dart (main automatik bila push masuk).
+
+Settings screen:
+   → Kad "Notification Sound" - RadioGroup<String> (3 RadioListTile, satu
+     per opsyen), setiap row ada ikon "play" untuk preview (main terus,
+     TANPA simpan pilihan)
+   → Tekan salah satu row (radio) → simpan users/{uid}.notificationSound
+     → terus main bunyi tu sekali sebagai maklum balas
+   → Tiada field (akaun lama sebelum ciri ni) = layan sebagai
+     "option2_marimba" (defaultNotificationSoundId) - ni jugalah pilihan
+     lalai eksplisit yang diminta semasa ciri ni dibina
+
+Push foreground (semua platform - Web/Android/iOS sama):
+   → main.dart punya FirebaseMessaging.onMessage listener (yang dah ada
+     untuk papar SnackBar, rujuk 5.12) kini turut panggil
+     playNotificationSoundForCurrentUser() - fetch keutamaan user semasa
+     dari Firestore, mainkan guna audioplayers
+
+Push background/system (Android SAHAJA - rujuk had di bawah):
+   → 3 fail .mp3 yang SAMA turut disalin ke
+     android/app/src/main/res/raw/{id}.mp3 (nama fail = id opsyen, valid
+     sebagai nama raw resource Android - huruf kecil + underscore)
+   → functions/index.js: kedua-dua trigger (onNewChatMessage,
+     onNewWarningLetter) kini fetch users/{uid}.notificationSound untuk
+     SETIAP penerima, letak dalam FCM payload sebagai
+     android.notification.sound (rujuk nama resource raw yang sama, FCM
+     akan cari & mainkan fail tu secara native semasa notifikasi sistem
+     dipaparkan)
+   → Redeploy functions diperlukan lepas ubah index.js (firebase deploy
+     --only functions)
+
+Had skop (Web Push):
+   → Web Push (Notification API pelayar) TIADA cara standard rentas-browser
+     untuk set bunyi custom pada notifikasi sistem/background - jadi push
+     background yang sampai di Web hanya guna bunyi lalai OS/pelayar,
+     walaupun user dah pilih bunyi custom dalam Settings. Bunyi custom
+     TETAP berfungsi penuh untuk push FOREGROUND di Web (main.dart punya
+     onMessage), cuma bukan untuk push background/system di platform tu.
+   → iOS tidak disentuh (app belum pernah dibina untuk iOS dalam sesi ni) -
+     kalau dibina masa depan, perlukan fail bunyi format .caf/.aiff/.wav
+     dibundle dalam projek iOS berasingan, bukan .mp3 yang dipakai untuk
+     Android/foreground.
+```
+
 ---
 
 ## 6. Firestore Security Rules (Ringkasan)
@@ -843,18 +897,31 @@ lib/
     ├── unread_badge_web.dart           // ✅ Badging API via dart:js_interop
     ├── file_validator.dart             // ✅ rujuk Seksyen 8
     ├── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
-    └── push_notifications.dart         // ✅ daftar/buang token FCM, rujuk Seksyen 5.12
+    ├── push_notifications.dart         // ✅ daftar/buang token FCM, rujuk Seksyen 5.12
+    └── notification_sounds.dart        // ✅ 3 pilihan bunyi + main audio, rujuk Seksyen 5.15
 
 assets/
-└── images/
-    └── tuturedu_logo.png               // ✅ didaftar dalam pubspec.yaml
+├── images/
+│   ├── arena_matrix_logo.png
+│   └── tuturedu_logo.png               // ✅ didaftar dalam pubspec.yaml
+└── sounds/                             // ✅ 3 fail bunyi notification, rujuk Seksyen 5.15
+    ├── option1_pop.mp3
+    ├── option2_marimba.mp3             // = default (5.15)
+    └── option3_double_tap.mp3
 
 web/
 └── firebase-messaging-sw.js            // ✅ service worker Web Push, rujuk Seksyen 5.12
 
 functions/                              // ✅ projek Node.js BERASINGAN (bukan lib/, bukan Dart/Flutter)
 ├── package.json                        // firebase-admin, firebase-functions v2
-└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter, rujuk Seksyen 5.12
+└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter, hantar android.notification.sound ikut keutamaan, rujuk 5.12/5.15
+
+android/app/src/main/res/               // ✅ ikon launcher ditukar (rujuk 4.1), + raw/ untuk bunyi Android
+├── mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png  // ✅ mark TuturEdu, latar putih
+└── raw/                                // ✅ salinan assets/sounds/*.mp3 (nama = Android resource name)
+    ├── option1_pop.mp3
+    ├── option2_marimba.mp3
+    └── option3_double_tap.mp3
 ```
 
 > **Nota bahasa UI:** Semua skrin (`lib/screens/`, `lib/utils/`, `lib/models/`) kini menggunakan Bahasa Inggeris sepenuhnya, termasuk code comments. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matrix") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
@@ -1088,8 +1155,9 @@ match /quizAttempts/{attemptId} {
 - [x] On-Duty/Off-Duty manual toggle (rujuk Seksyen 5.10)
 - [x] Admin Reports (statistik sistem, rujuk Seksyen 5.11)
 - [x] Chat list (senarai perbualan aktif)
-- [x] Push notification (FCM, rujuk Seksyen 5.12) — Web VAPID key dah diisi & dideploy, aktif sepenuhnya (Android/iOS tak terjejas tapi belum dibina/diuji)
-- [x] Settings Screen — Edit Profile, Change Password, Push toggle, Log Out, Delete Account (self-service), Leave/Holiday dates untuk Teacher (rujuk Seksyen 5.14)
+- [x] Push notification (FCM, rujuk Seksyen 5.12) — Web VAPID key dah diisi & dideploy, aktif sepenuhnya; Android dapat bunyi custom untuk background push (rujuk 5.15) - iOS tak terjejas tapi belum dibina/diuji
+- [x] Settings Screen — Edit Profile, Change Password, Push toggle, Notification Sound (3 pilihan), Log Out, Delete Account (self-service), Leave/Holiday dates untuk Teacher (rujuk Seksyen 5.14/5.15)
+- [x] Android APK — `flutter build apk --release` disahkan berfungsi, ikon launcher ditukar dari default Flutter (rujuk 4.1). Package name `com.example.tuturedu` & debug signing masih placeholder - cukup untuk sideload/demo, belum sedia untuk publish Play Store
 - [ ] Full Admin account deletion (padam akaun Firebase Authentication, perlukan Cloud Function/Admin SDK — infra Cloud Functions dah wujud sekarang dari kerja push notification, jadi ni jadi lebih senang nak tambah bila-bila; BEZA dengan self-delete akaun sendiri yang dah dibina dalam Settings)
 ---
 

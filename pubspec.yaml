@@ -20,6 +20,7 @@ dependencies:
   firebase_storage: ^13.4.6
   url_launcher: ^6.3.2
   firebase_messaging: ^16.5.0
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +33,4 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/sounds/

@@ -22,16 +22,27 @@ const INVALID_TOKEN_CODES = new Set([
   "messaging/registration-token-not-registered",
 ]);
 
+// Must match defaultNotificationSoundId in lib/utils/notification_sounds.dart.
+const DEFAULT_SOUND = "option2_marimba";
+
 // Sends `notification`/`data` to every token in `tokens`, then removes any
 // token FCM reports as dead from `uid`'s fcmTokens array so it doesn't grow
-// unbounded with uninstalled/expired devices.
-async function sendAndPruneTokens(uid, tokens, notification, data) {
+// unbounded with uninstalled/expired devices. `soundId` (users/{uid}.
+// notificationSound) must match a raw resource name in
+// android/app/src/main/res/raw/ - Android only, Web Push has no
+// cross-browser custom-sound support so this field is simply ignored there.
+async function sendAndPruneTokens(uid, tokens, notification, data, soundId) {
   if (tokens.length === 0) return;
 
   const response = await messaging.sendEachForMulticast({
     tokens,
     notification,
     data,
+    android: {
+      notification: {
+        sound: soundId || DEFAULT_SOUND,
+      },
+    },
   });
 
   const staleTokens = response.responses
@@ -73,7 +84,8 @@ exports.onNewChatMessage = onDocumentCreated(
       recipients.map(async (uid) => {
         const userDoc = await db.collection("users").doc(uid).get();
         const tokens = userDoc.data()?.fcmTokens || [];
-        await sendAndPruneTokens(uid, tokens, { title, body }, { chatId, type: "chatMessage" });
+        const soundId = userDoc.data()?.notificationSound;
+        await sendAndPruneTokens(uid, tokens, { title, body }, { chatId, type: "chatMessage" }, soundId);
       })
     );
   }
@@ -90,12 +102,14 @@ exports.onNewWarningLetter = onDocumentCreated(
 
     const parentDoc = await db.collection("users").doc(letter.parentUid).get();
     const tokens = parentDoc.data()?.fcmTokens || [];
+    const soundId = parentDoc.data()?.notificationSound;
 
     await sendAndPruneTokens(
       letter.parentUid,
       tokens,
       { title: "Warning Letter", body: letter.reason || "A warning letter has been sent regarding your child." },
-      { type: "warningLetter", letterId: event.params.letterId }
+      { type: "warningLetter", letterId: event.params.letterId },
+      soundId
     );
   }
 );

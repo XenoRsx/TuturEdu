@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/welcome_screen.dart';
+import 'utils/notification_sounds.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,10 @@ class _MyAppState extends State<MyApp> {
           duration: const Duration(seconds: 4),
         ),
       );
+      // Best-effort - see notification_sounds.dart. Only for foreground
+      // messages; background/system notifications get their sound from the
+      // FCM payload itself (Android only, set server-side).
+      playNotificationSoundForCurrentUser();
     });
   }
 
