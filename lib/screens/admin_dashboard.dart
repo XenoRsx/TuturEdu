@@ -6,15 +6,20 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/push_notifications.dart';
+import 'admin_reports_screen.dart';
 import 'login_screen.dart';
 import 'manage_users_screen.dart';
 import 'manage_subjects_screen.dart';
+import 'settings_screen.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
 
   Future<Map<String, int>> _fetchStats() async {
-    final usersSnapshot = await FirebaseFirestore.instance.collection('users').get();
+    final usersSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .get();
 
     int studentCount = 0;
     int teacherCount = 0;
@@ -44,6 +49,7 @@ class AdminDashboard extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
+              await unregisterPushToken();
               await FirebaseAuth.instance.signOut();
               if (!context.mounted) return;
               Navigator.pushReplacement(
@@ -60,7 +66,8 @@ class AdminDashboard extends StatelessWidget {
           FutureBuilder<Map<String, int>>(
             future: _fetchStats(),
             builder: (context, snapshot) {
-              final stats = snapshot.data ?? {'students': 0, 'teachers': 0, 'parents': 0};
+              final stats =
+                  snapshot.data ?? {'students': 0, 'teachers': 0, 'parents': 0};
               return Row(
                 children: [
                   _statCard('Students', stats['students']!, Colors.blue),
@@ -104,13 +111,25 @@ class AdminDashboard extends StatelessWidget {
             context,
             icon: Icons.bar_chart,
             title: 'Reports',
-            subtitle: 'Coming soon',
-            color: Colors.grey,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Reports feature is coming soon.')),
-              );
-            },
+            subtitle: 'Users, chats, quizzes, and attendance stats',
+            color: Colors.deepPurple,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          _menuCard(
+            context,
+            icon: Icons.settings_outlined,
+            title: 'Settings',
+            subtitle: 'Profile, password, notifications, delete account',
+            color: Colors.blueGrey,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
           ),
         ],
       ),
@@ -129,10 +148,17 @@ class AdminDashboard extends StatelessWidget {
           children: [
             Text(
               '$count',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
           ],
         ),
       ),

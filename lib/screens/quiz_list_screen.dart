@@ -14,7 +14,11 @@ import 'host_quiz_session_screen.dart';
 class QuizListScreen extends StatelessWidget {
   const QuizListScreen({super.key});
 
-  Future<void> _deleteQuiz(BuildContext context, String quizId, String title) async {
+  Future<void> _deleteQuiz(
+    BuildContext context,
+    String quizId,
+    String title,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -36,7 +40,9 @@ class QuizListScreen extends StatelessWidget {
 
     if (confirmed != true) return;
 
-    final quizRef = FirebaseFirestore.instance.collection('quizzes').doc(quizId);
+    final quizRef = FirebaseFirestore.instance
+        .collection('quizzes')
+        .doc(quizId);
     final questions = await quizRef.collection('questions').get();
     final batch = FirebaseFirestore.instance.batch();
     for (final doc in questions.docs) {
@@ -46,32 +52,47 @@ class QuizListScreen extends StatelessWidget {
     await batch.commit();
   }
 
-  Future<void> _hostSession(BuildContext context, String quizId, String title) async {
+  Future<void> _hostSession(
+    BuildContext context,
+    String quizId,
+    String title,
+  ) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
     final joinCode = await _generateUniqueJoinCode();
 
-    final sessionRef = await FirebaseFirestore.instance.collection('quizSessions').add({
-      'quizId': quizId,
-      'hostUid': currentUser.uid,
-      'joinCode': joinCode,
-      'status': 'waiting',
-      'currentQuestionIndex': 0,
-      'startedAt': null,
-      'endedAt': null,
-    });
+    final sessionRef = await FirebaseFirestore.instance
+        .collection('quizSessions')
+        .add({
+          'quizId': quizId,
+          'hostUid': currentUser.uid,
+          'joinCode': joinCode,
+          'status': 'waiting',
+          'currentQuestionIndex': 0,
+          'startedAt': null,
+          'endedAt': null,
+        });
 
     if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => HostQuizSessionScreen(
-          sessionId: sessionRef.id,
-          quizTitle: title,
-        ),
+        builder: (_) =>
+            HostQuizSessionScreen(sessionId: sessionRef.id, quizTitle: title),
       ),
     );
+  }
+
+  String _modeLabel(String mode) {
+    switch (mode) {
+      case 'self_paced':
+        return 'Self-Paced';
+      case 'both':
+        return 'Live + Self-Paced';
+      default:
+        return 'Live Session';
+    }
   }
 
   Future<String> _generateUniqueJoinCode() async {
@@ -146,7 +167,11 @@ class QuizListScreen extends StatelessWidget {
                         color: QuizTheme.primary.withValues(alpha: 0.08),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.quiz_outlined, size: 40, color: QuizTheme.primary),
+                      child: const Icon(
+                        Icons.quiz_outlined,
+                        size: 40,
+                        color: QuizTheme.primary,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -167,7 +192,11 @@ class QuizListScreen extends StatelessWidget {
                 final title = data['title'] ?? 'Untitled Quiz';
                 final subject = data['subjectLevel'] ?? '';
                 final questionCount = data['questionCount'] ?? 0;
-                final color = QuizTheme.optionColors[title.hashCode.abs() % QuizTheme.optionColors.length];
+                final mode = data['mode'] ?? 'live';
+                final canHost = mode == 'live' || mode == 'both';
+                final color =
+                    QuizTheme.optionColors[title.hashCode.abs() %
+                        QuizTheme.optionColors.length];
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
@@ -183,28 +212,66 @@ class QuizListScreen extends StatelessWidget {
                     ],
                   ),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     leading: Container(
                       width: 44,
                       height: 44,
-                      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-                      child: const Icon(Icons.quiz_rounded, color: Colors.white),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.quiz_rounded,
+                        color: Colors.white,
+                      ),
                     ),
-                    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('$subject · $questionCount question(s)'),
+                    title: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      '$subject · $questionCount question(s) · ${_modeLabel(mode)}',
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
                           tooltip: 'Delete',
                           onPressed: () => _deleteQuiz(context, doc.id, title),
                         ),
-                        const Icon(Icons.play_circle_fill, color: QuizTheme.primary, size: 28),
+                        Icon(
+                          canHost
+                              ? Icons.play_circle_fill
+                              : Icons.assignment_turned_in_outlined,
+                          color: QuizTheme.primary,
+                          size: 28,
+                        ),
                       ],
                     ),
-                    onTap: () => _hostSession(context, doc.id, title),
+                    onTap: () {
+                      if (!canHost) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'This quiz is Self-Paced only — students attempt it on their '
+                              'own, no live session to host.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      _hostSession(context, doc.id, title);
+                    },
                   ),
                 );
               },

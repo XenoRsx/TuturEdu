@@ -23,7 +23,7 @@ class OfficeHours {
   // SAFE: since it's wrapped in kDebugMode, this flag automatically becomes
   // `false` in a production build (flutter build web / apk --release), even
   // if you forget to flip it back before deploying.
-  static bool debugForceOpen = true;
+  static bool debugForceOpen = false;
   // -------------------------------------------------
 
   /// Returns true if the current time is within office hours.

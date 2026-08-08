@@ -1,11 +1,28 @@
 // lib/screens/chat_screen.dart
 //
 // The actual chat screen - sends/receives messages in real time via
-// Firestore. Chat will LOCK (send button disabled) outside office hours.
+// Firestore. Chat will LOCK (send button disabled) outside office hours -
+// see _computeIsOfficeHour(), which also folds in the chat's teacher's
+// manual On-Duty/Off-Duty status (BLUEPRINT.md 5.10) and Leave/Holiday date
+// range set from Settings (BLUEPRINT.md 5.14): a teacher going Off-Duty, or
+// currently within their leave dates, locks the chat the same way as being
+// outside office hours would, even during the scheduled window.
+// `_relevantTeacherUid` is whichever participant is the Teacher (self, for
+// a Teacher viewing their own chat; otherUserUid/groupAdmin, for a
+// Student/Parent viewing a chat with one) - its dutyStatus/leaveStart/
+// leaveEnd are watched live so the lock updates immediately if the teacher
+// toggles or a leave period starts/ends while this screen is open.
 //
-// Overtime Mode (Teacher only) while chat is locked:
-//   - "Reply Now (Overtime Mode)" -> overrides the lock, replies immediately.
-//   - "Schedule Reply" -> saves a draft, auto-sends once office hours reopen.
+// While chat is locked:
+//   - "Reply Now (Overtime Mode)" (Teacher only) -> overrides the lock,
+//     replies immediately, marked isOvertimeReply.
+//   - "Schedule Reply"/"Schedule Message" (every role) -> saves a draft to
+//     chats/{chatId}/scheduledReplies, auto-sent once the chat reopens (see
+//     BLUEPRINT.md 5.4). The whole pipeline - rules, dialog, storage,
+//     auto-send, pending-list UI - is keyed by senderId only, no role
+//     check, so Student/Parent get the exact same mechanism as Teacher;
+//     only the "Reply Now" bypass stays Teacher-only, since that one is
+//     specifically about a teacher choosing to break their own hours.
 //
 // Read receipts (WhatsApp-style):
 //   - chats/{chatId}.lastRead: Map<uid, Timestamp> - updated whenever a
@@ -59,6 +76,16 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isTeacher = false;
   bool _overtimeActive = false; // teacher tapped "Reply Now (Overtime Mode)"
 
+  // ----- On-Duty/Off-Duty state (see file header + BLUEPRINT.md 5.10) -----
+  String? _relevantTeacherUid;
+  String? _groupAdminUid;
+  bool _teacherOffDuty = false;
+  StreamSubscription<DocumentSnapshot>? _teacherDutySub;
+
+  // ----- Leave/Holiday state (Settings screen, see BLUEPRINT.md 5.14) -----
+  DateTime? _teacherLeaveStart;
+  DateTime? _teacherLeaveEnd;
+
   // ----- Attachment upload state -----
   bool _isUploadingAttachment = false;
   double? _uploadProgress; // null = indeterminate, 0.0-1.0 = known progress
@@ -86,10 +113,24 @@ class _ChatScreenState extends State<ChatScreen> {
     return name;
   }
 
+  // "Chat open" = automatic office-hour schedule AND the relevant teacher
+  // hasn't manually gone Off-Duty AND isn't on leave. See file header,
+  // BLUEPRINT.md 5.10 (duty toggle) and 5.14 (leave dates).
+  bool _computeIsOfficeHour() =>
+      OfficeHours.isOfficeHourNow() && !_teacherOffDuty && !_isTeacherOnLeave;
+
+  bool get _isTeacherOnLeave {
+    final start = _teacherLeaveStart;
+    final end = _teacherLeaveEnd;
+    if (start == null || end == null) return false;
+    final now = DateTime.now();
+    return !now.isBefore(start) && !now.isAfter(end);
+  }
+
   @override
   void initState() {
     super.initState();
-    _isOfficeHour = OfficeHours.isOfficeHourNow();
+    _isOfficeHour = _computeIsOfficeHour();
     _loadCurrentUserRole();
 
     final chatRef = FirebaseFirestore.instance
@@ -106,6 +147,13 @@ class _ChatScreenState extends State<ChatScreen> {
         _participants = List<String>.from(data['participants'] ?? []);
         _lastRead = Map<String, dynamic>.from(data['lastRead'] ?? {});
       });
+      if (widget.isGroup) {
+        final groupAdmin = data['groupAdmin'] as String?;
+        if (groupAdmin != null && groupAdmin != _groupAdminUid) {
+          _groupAdminUid = groupAdmin;
+          _watchTeacherDutyStatus(groupAdmin);
+        }
+      }
     });
 
     // Mark read now, and again whenever the messages subcollection changes
@@ -119,7 +167,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Check every minute whether office hour status has changed
     // (e.g. user opened the app at 4:59pm, chat should lock at 5:00pm)
     _officeHourTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      final nowStatus = OfficeHours.isOfficeHourNow();
+      final nowStatus = _computeIsOfficeHour();
       if (nowStatus != _isOfficeHour && mounted) {
         setState(() {
           _isOfficeHour = nowStatus;
@@ -130,6 +178,38 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  // Watches the given teacher's dutyStatus live, so the lock updates
+  // immediately if they toggle On-Duty/Off-Duty while this screen is open.
+  void _watchTeacherDutyStatus(String teacherUid) {
+    if (_relevantTeacherUid == teacherUid) return;
+    _relevantTeacherUid = teacherUid;
+    _teacherDutySub?.cancel();
+    _teacherDutySub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(teacherUid)
+        .snapshots()
+        .listen((doc) {
+          if (!mounted) return;
+          final data = doc.data();
+          final offDuty = data?['dutyStatus'] == 'off_duty';
+          final leaveStart = (data?['leaveStart'] as Timestamp?)?.toDate();
+          final leaveEnd = (data?['leaveEnd'] as Timestamp?)?.toDate();
+          if (offDuty == _teacherOffDuty &&
+              leaveStart == _teacherLeaveStart &&
+              leaveEnd == _teacherLeaveEnd) {
+            return;
+          }
+          setState(() {
+            _teacherOffDuty = offDuty;
+            _teacherLeaveStart = leaveStart;
+            _teacherLeaveEnd = leaveEnd;
+            _isOfficeHour = _computeIsOfficeHour();
+            if (_isOfficeHour) _overtimeActive = false;
+          });
+          if (_isOfficeHour) _autoSendDueScheduledReplies();
+        });
+  }
+
   Future<void> _loadCurrentUserRole() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
@@ -138,9 +218,18 @@ class _ChatScreenState extends State<ChatScreen> {
         .doc(currentUser.uid)
         .get();
     final role = doc.data()?['role'] ?? '';
+    final isTeacher = role == 'Teacher';
     if (mounted) {
-      setState(() => _isTeacher = role == 'Teacher');
+      setState(() => _isTeacher = isTeacher);
     }
+
+    // Group chats resolve their teacher (groupAdmin) from the chat-doc
+    // listener in initState instead - see _chatDocSub.
+    if (!widget.isGroup) {
+      final teacherUid = isTeacher ? currentUser.uid : widget.otherUserUid;
+      if (teacherUid != null) _watchTeacherDutyStatus(teacherUid);
+    }
+
     if (_isOfficeHour) _autoSendDueScheduledReplies();
   }
 
@@ -174,6 +263,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _officeHourTimer?.cancel();
     _chatDocSub?.cancel();
     _messagesSub?.cancel();
+    _teacherDutySub?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -186,10 +276,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = isQuickReply ? quickReplyText : _messageController.text.trim();
     if (text.isEmpty) return;
 
-    final officeHourNow = OfficeHours.isOfficeHourNow();
+    final officeHourNow = _computeIsOfficeHour();
 
-    // Outside office hours, a message can only go through if Overtime Mode
-    // is active (teacher already tapped "Reply Now (Overtime Mode)").
+    // Outside office hours (or the teacher is manually Off-Duty), a message
+    // can only go through if Overtime Mode is active (teacher already
+    // tapped "Reply Now (Overtime Mode)").
     if (!officeHourNow && !_overtimeActive) {
       if (mounted) setState(() => _isOfficeHour = false);
       return;
@@ -230,7 +321,7 @@ class _ChatScreenState extends State<ChatScreen> {
   // ----- File attachment: pick, validate (3 layers - see file_validator.dart),
   // upload to Firebase Storage, then send as a message -----
   Future<void> _pickAndSendAttachment() async {
-    final officeHourNow = OfficeHours.isOfficeHourNow();
+    final officeHourNow = _computeIsOfficeHour();
     if (!officeHourNow && !_overtimeActive) {
       if (mounted) setState(() => _isOfficeHour = false);
       return;
@@ -413,13 +504,15 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _overtimeActive = true);
   }
 
-  // ----- Overtime Mode: "Schedule Reply" -----
+  // ----- "Schedule Reply"/"Schedule Message" - available to every role,
+  // unlike "Reply Now (Overtime)" which only makes sense for a Teacher
+  // choosing to break their own office hours. -----
   Future<void> _openScheduleReplyDialog() async {
     final controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Schedule Reply'),
+        title: Text(_isTeacher ? 'Schedule Reply' : 'Schedule Message'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -712,7 +805,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           if (!_isOfficeHour) _buildLockedBanner(),
-          if (_isTeacher) _buildScheduledRepliesList(),
+          _buildScheduledRepliesList(),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -883,7 +976,13 @@ class _ChatScreenState extends State<ChatScreen> {
           Row(
             children: [
               Icon(
-                _overtimeActive ? Icons.bolt : Icons.lock_clock,
+                _overtimeActive
+                    ? Icons.bolt
+                    : (_isTeacherOnLeave
+                          ? Icons.beach_access_outlined
+                          : (_teacherOffDuty
+                                ? Icons.work_off_outlined
+                                : Icons.lock_clock)),
                 color: Colors.orange,
                 size: 20,
               ),
@@ -892,6 +991,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Text(
                   _overtimeActive
                       ? 'Overtime Mode active — your message will be marked as an after-hours reply.'
+                      : _isTeacherOnLeave
+                      ? 'This teacher is on leave until '
+                            '${_teacherLeaveEnd!.day.toString().padLeft(2, '0')}/'
+                            '${_teacherLeaveEnd!.month.toString().padLeft(2, '0')}/'
+                            '${_teacherLeaveEnd!.year}. Chat will reopen after that.'
+                      : _teacherOffDuty
+                      ? 'This teacher is currently Off-Duty. Chat will reopen once '
+                            'they go back On-Duty.'
                       : 'Chat is closed outside office hours (${OfficeHours.officeHourText()}). '
                             'Reopens: ${OfficeHours.nextOpenText()}.',
                   style: const TextStyle(fontSize: 12.5, color: Colors.black87),
@@ -899,48 +1006,66 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ],
           ),
-          if (_isTeacher && !_overtimeActive) ...[
+          if (!_overtimeActive) ...[
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _activateOvertimeReplyNow,
-                    icon: const Icon(Icons.bolt, size: 16),
-                    label: const Text(
-                      'Reply Now (Overtime)',
-                      style: TextStyle(fontSize: 12.5),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.deepOrange,
-                      side: const BorderSide(color: Colors.deepOrange),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _openScheduleReplyDialog,
-                    icon: const Icon(Icons.schedule_send, size: 16),
-                    label: const Text(
-                      'Schedule Reply',
-                      style: TextStyle(fontSize: 12.5),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                      side: const BorderSide(color: Colors.blue),
+            if (_isTeacher)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _activateOvertimeReplyNow,
+                      icon: const Icon(Icons.bolt, size: 16),
+                      label: const Text(
+                        'Reply Now (Overtime)',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.deepOrange,
+                        side: const BorderSide(color: Colors.deepOrange),
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _openScheduleReplyDialog,
+                      icon: const Icon(Icons.schedule_send, size: 16),
+                      label: const Text(
+                        'Schedule Reply',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        side: const BorderSide(color: Colors.blue),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _openScheduleReplyDialog,
+                  icon: const Icon(Icons.schedule_send, size: 16),
+                  label: const Text(
+                    'Schedule Message',
+                    style: TextStyle(fontSize: 12.5),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue),
+                  ),
                 ),
-              ],
-            ),
+              ),
           ],
         ],
       ),
     );
   }
 
-  /// List of scheduled replies still pending for this chat (teacher only).
+  /// List of scheduled replies/messages still pending for this chat, owned
+  /// by the current user (any role - query is keyed by senderId).
   Widget _buildScheduledRepliesList() {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return const SizedBox.shrink();

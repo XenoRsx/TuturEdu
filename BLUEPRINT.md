@@ -44,9 +44,12 @@ users (collection)
         ├── subjects: array<string>               // format "Subjek Tahap", contoh: ["Add Maths Form 4", "Physics Form 5"]
                                                     // Teacher: subjek yang diajar (boleh lebih dari satu)
                                                     // Student: subjek yang diambil (boleh lebih dari satu)
-        ├── parentUid: string                     // untuk Student, rujuk ke uid Parent
-        ├── childUid: string                      // untuk Parent, rujuk ke uid Student
-        ├── dutyStatus: "on_duty" | "off_duty"    // untuk Teacher, toggle manual
+        ├── parentUid: string                     // ✅ untuk Student, rujuk ke uid Parent - diisi oleh Admin (link_parent_child_screen.dart), rujuk 5.9
+        ├── childUid: string                      // ✅ untuk Parent, rujuk ke uid Student - diisi oleh Admin, kedua-dua field ditulis serentak dalam SATU batch
+        ├── dutyStatus: "on_duty" | "off_duty"    // ✅ untuk Teacher, toggle manual dari AppBar TeacherDashboard - field tiada (belum pernah toggle) = layan sebagai "on_duty", rujuk 5.10
+        ├── fcmTokens: array<string>              // ✅ push notification tokens peranti (boleh > 1 - login banyak device/tab), rujuk 5.12
+        ├── pushEnabled: boolean                  // ✅ keutamaan Settings - tiada field = layan sebagai true, rujuk 5.14
+        ├── leaveStart / leaveEnd: timestamp       // ✅ untuk Teacher, julat tarikh cuti (Settings) - auto Off-Duty, rujuk 5.14
         └── workingHours: { start: string, end: string }  // custom per-teacher (future)
 ```
 
@@ -82,32 +85,35 @@ chats (collection)
                     └── status: "pending" | "sent"
 ```
 
-### 3.3 Collection: `attendance`
+### 3.3 Collection: `attendance` (✅ Sudah dilaksanakan)
 
 ```
 attendance (collection)
   └── {studentUid}
         └── records (sub-collection)
-              └── {recordId}
+              └── {recordId}                // ✅ deterministik: "{subjectLevel}_{yyyy-MM-dd}"
+                                              //    (tandakan semula subjek+tarikh sama = overwrite, bukan duplicate)
                     ├── subject: string          // format "Subjek Tahap", contoh: "Add Maths Form 4"
                     ├── date: timestamp
-                    └── status: "present" | "absent"
+                    ├── status: "present" | "absent"
+                    ├── markedBy: string          // ✅ uid teacher yang tandakan
+                    └── markedAt: timestamp        // ✅ serverTimestamp()
 ```
 
-### 3.4 Collection: `performance`
+### 3.4 Collection: `performance` (✅ Sudah dilaksanakan)
 
 ```
 performance (collection)
-  └── {subjectLevel}                     // contoh: "Add Maths Form 4"
+  └── {subjectLevel}                     // contoh: "Add Maths Form 4" - guna sebagai document ID terus
         └── students (sub-collection)
               └── {studentUid}
                     ├── name: string
-                    ├── percentage: number
-                    ├── trend: "steady" | "dropping" | "critical"
+                    ├── percentage: number             // 0-100, diisi manual oleh teacher
+                    ├── trend: "steady" | "dropping" | "critical"   // ✅ dikira automatik, rujuk 5.5
                     └── lastUpdated: timestamp
 ```
 
-### 3.5 Collection: `warningLetters`
+### 3.5 Collection: `warningLetters` (✅ Sudah dilaksanakan)
 
 ```
 warningLetters (collection)
@@ -115,9 +121,10 @@ warningLetters (collection)
         ├── studentUid: string
         ├── teacherUid: string
         ├── parentUid: string
-        ├── reason: string
+        ├── subjectLevel: string    // ✅ ditambah semasa implementasi - subjek yang trigger warning
+        ├── reason: string          // teacher edit sebelum hantar, prefilled dengan cadangan mesej
         ├── sentAt: timestamp
-        └── acknowledged: boolean
+        └── acknowledged: boolean   // sentiasa false semasa dicipta - tiada UI utk ack lagi (student/parent belum dibina)
 ```
 
 ### 3.6 Collection: `subjectCatalog` (✅ Sudah dilaksanakan)
@@ -143,7 +150,7 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Real-time Chat** — mesej dikemas kini secara langsung menggunakan `StreamBuilder` + Firestore `snapshots()`
 - **Cari Pensyarah** — student boleh cari & pilih teacher untuk mula chat baru
 - **Office Hour Lock (Global)** — chat automatik dikunci di luar waktu pejabat (Isnin–Jumaat, 9AM–5PM), guna semakan `DateTime.now()` pada client
-- **Overtime Mode (Teacher)** — bila chat locked, teacher diberi pilihan "Reply Now (Overtime Mode)" atau "Schedule Reply" (lihat 4.1 & 5.4)
+- **Overtime Mode & Schedule Message** — bila chat locked, Teacher diberi pilihan "Reply Now (Overtime Mode)" atau "Schedule Reply"; Student/Parent diberi "Schedule Message" (mekanisme sama, cuma tiada bypass "Reply Now" — rujuk 5.4)
 - **Admin Dashboard** — hub khas untuk role Admin: quick stats (jumlah Student/Teacher/Parent), navigasi ke Manage Users & Manage Subjects
 - **Manage Users (Admin)** — Admin boleh search/filter user ikut role, tukar role user (contoh Student → Teacher), padam user (buang dokumen Firestore; akaun Firebase Authentication kekal — nota dipapar dalam UI, rujuk 4.2/limitation), dan "Edit Subjects" (assign entri dari `subjectCatalog` ke Teacher/Student individu)
 - **Manage Subjects (Admin) (✅ CRUD penuh)** — Admin boleh Add/Edit/Delete entri `subjectCatalog`. **Add** guna dropdown (bukan free-text) untuk Subject & Level — senarai subjek biasa (Bahasa Malaysia, English, Add Maths, dll.) & level (Year 1-6, Form 1-5, Lower/Upper Six), dengan pilihan "Other (type manually)" yang papar text field custom kalau subjek/level tak ada dalam senarai. Ini + duplicate-name check (case-sensitive exact match sebelum create) elak inconsistency macam "Add Maths" vs "add maths". **Edit** (rename, masih free-text sebab nama gabungan susah nak split balik ke Subject+Level) papar amaran berapa ramai profile (`users.subjects arrayContains`) yang sedang guna nama tu sebelum simpan — sebab `users.subjects` simpan nama sebagai plain string (bukan reference ke dokumen catalog), rename di sini TIDAK auto-update profile yang dah assign. **Delete** papar amaran usage count yang sama sebelum confirm. Ada search field untuk tapis senarai.
@@ -157,33 +164,26 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **OS-level unread badge (✅, best-effort)** — `lib/utils/unread_badge.dart` (+ `_stub.dart` / `_web.dart`, conditional export ikut `dart.library.js_interop`) panggil Web Badging API (`navigator.setAppBadge` / `clearAppBadge`) setiap kali jumlah keseluruhan chat belum dibaca berubah dalam `ChatListScreen`, dan clear semasa logout. Ini bagi badge kat icon app macam WhatsApp (bulatan hijau + nombor) kat luar tab/skrin app. **Had:** hanya berkesan di browser Chromium (Chrome/Edge) & bila TuturEdu di-"install" sebagai PWA (`web/manifest.json` dah `display: standalone`) — di browser/konteks lain, fungsi ni silently no-op (feature-detected via `dart:js_interop`, tak crash).
 - **File Upload / Attachment (✅ dikodkan & berfungsi hujung-ke-hujung, rujuk Seksyen 8)** — Butang 📎 dalam `chat_screen.dart` → `FilePicker.pickFiles(withData: true)` → `FileValidator.validate()` (`lib/utils/file_validator.dart`, 3-lapisan: saiz ≤10MB, extension, magic number — rujuk 8.3/8.4) → upload ke Firebase Storage (`chats/{chatId}/attachments/{messageId}_{namaFail}`) dengan progress bar sebenar + timeout 30 saat (elak upload "hang" selama-lamanya kalau ada masalah rangkaian) → mesej dengan `attachmentUrl`/`attachmentType`/`attachmentName`. Bubble papar thumbnail (image, tap → `FullImageScreen` penuh skrin) atau kad ikon+nama (document, tap → buka luar guna `url_launcher`). Firebase Storage project `tuturedu-app` dah **enabled** (bucket `tuturedu-app.firebasestorage.app`, US-EAST1 no-cost location, plan Blaze) & `storage.rules` dah **dideploy**.
 - **Quick Reply Chips (✅ dikodkan)** — row chip boleh scroll horizontal ("OK", "Yes", "No", "Thank you", "Noted", "Please wait") di atas input bar dalam `chat_screen.dart`, hanya papar bila chat tak locked. Tekan chip terus hantar mesej tu (guna fungsi `_sendMessage` yang sama, parameter `quickReplyText`), ditanda `isQuickReply: true` dalam Firestore.
-- **Interactive Quiz — Live Session (✅ dikodkan, rujuk Seksyen 9)** — Mod Kahoot-style sahaja buat masa ni (Self-Paced belum dibina, rujuk 4.2). Teacher: `quiz_list_screen.dart` ("My Quizzes") → `create_quiz_screen.dart` (tajuk, subjek, soalan aneka pilihan 4 opsyen + time limit + points) → tekan quiz untuk `host_quiz_session_screen.dart` (generate join code 6-digit, waiting room dengan senarai student join secara live, kawal "Next Question"/"End Quiz", leaderboard akhir). Student: FAB "Join a Quiz" → `join_quiz_screen.dart` (masukkan join code) → `live_quiz_play_screen.dart` (StreamBuilder ikut `quizSessions.status`/`currentQuestionIndex`, countdown timer disegerakkan guna `currentQuestionStartedAt`, submit jawapan, leaderboard). Firestore rules ditambah untuk `quizzes`/`quizSessions` (rujuk firestore.rules) — markah dikira & ditulis client-side (had FYP yang sama macam file validation, tiada Cloud Function). UI/UX guna palet vibrant gaya Wayground/Kahoot (`quiz_theme.dart` — 4 warna+bentuk opsyen, gradient ungu, leaderboard podium dikongsi via `quiz_leaderboard_view.dart`).
+- **Class Performance Overview + Warning Letter (✅ dikodkan, rujuk Seksyen 5.5)** — `class_performance_screen.dart`: Teacher pilih subjek dia ajar (dropdown), papar "Class Health Score" (purata `percentage` semua student yang dah digred dalam subjek tu) + breakdown Safe/At-Risk/Barred (>=70% / 50-69% / <50%). Senarai student enrolled dalam subjek tu (query `users` sama macam Group Chat) digabung dengan data `performance/{subjectLevel}/students` (kalau belum ada rekod, papar "Not graded yet"). Tekan "%" pada row student untuk buka dialog masukkan markah baru (0-100) — `trend` (Steady/Dropping/Critical) dikira **automatik** berdasarkan beza markah baru vs lama (drop >=15 mata = Critical, drop < 15 = Dropping, selain itu Steady), bukan dipilih manual oleh teacher. Student dengan trend "Critical" papar butang "Send Warning Letter" (dialog reason boleh edit, prefilled cadangan mesej) — cipta dokumen `warningLetters` guna `parentUid` dari profile student (`users/{uid}.parentUid`); kalau student tiada parent linked, papar mesej ralat dan tidak hantar. Setiap student ada butang "History" (bottom sheet senarai warning letter yang pernah dihantar untuk dia, `orderBy sentAt desc`).
+- **Attendance (✅ dikodkan, rujuk Seksyen 5.8)** — `take_attendance_screen.dart` (Teacher): pilih subjek + tarikh, senarai student enrolled dipapar dengan togol Present/Absent (default Present, ada "Mark All Present"/"Mark All Absent"), simpan sebagai satu dokumen per student dalam `attendance/{studentUid}/records` guna document ID deterministik (`{subjectLevel}_{yyyy-MM-dd}`) supaya tandakan semula subjek+tarikh yang sama overwrite rekod asal. `attendance_overview_screen.dart` (Student): papar Attendance Rate (%), jumlah kelas dihadiri, dan amaran "Low attendance warning" kalau rate < 75%, dengan dropdown filter ikut subjek dan senarai rekod penuh.
+- **Parent Module (✅ dikodkan, rujuk Seksyen 5.9)** — Admin pautkan akaun Parent ke akaun Student lewat `link_parent_child_screen.dart` (accessible dari `manage_users_screen.dart` → "Link Child" pada row Parent), tulis `parentUid`/`childUid` serentak dalam satu batch supaya kedua-dua field sentiasa segerak. `parent_dashboard.dart` kini `ChatListScreen` sebenar (bukan placeholder lagi) — sama corak dengan Teacher/Student: FAB "Message a Teacher" (guna `UserSearchScreen` generik yang sama), nav bar ada "My Child" (→ `child_overview_screen.dart`, tab Attendance + Performance untuk anak yang dipautkan, read-only, papar mesej "belum dipautkan, hubungi Admin" kalau `childUid` masih null) dan ikon "Warning Letters" (→ `parent_warning_letters_screen.dart`, senarai warning letter berkaitan anak, boleh tekan "Mark Read" untuk kemaskini `acknowledged`). Tiada perubahan Firestore rules diperlukan — rules untuk `attendance`/`warningLetters` yang parent-aware sudah sedia dari modul Attendance & Class Performance sebelum ni, cuma baru betul-betul "dipakai" sekarang.
+- **On-Duty / Off-Duty Toggle (✅ dikodkan, rujuk Seksyen 5.10)** — ikon `work_outline`/`work_off_outlined` dalam AppBar `teacher_dashboard.dart` (`ChatListScreen.extraActions`, param baru), StreamBuilder live pada `users/{uid}.dutyStatus` supaya ikon+warna sentiasa terkini. Tekan untuk tukar status terus (tiada dialog confirm - reversible, rendah risiko), papar SnackBar mengesahkan. Kesan sebenar: `chat_screen.dart` kini kira "chat terbuka" = jadual office hour automatik **DAN** teacher berkaitan chat tu tak "off_duty" (`_computeIsOfficeHour()`) — kalau teacher tukar ke Off-Duty, SEMUA chat dia terus locked serta-merta (guna banner+Overtime Mode UI yang sama macam luar waktu pejabat), walaupun masih dalam waktu berjadual. `_relevantTeacherUid` (diri sendiri untuk Teacher, `otherUserUid`/`groupAdmin` untuk Student/Parent) di-watch live supaya lock terus update kalau teacher toggle semasa chat screen terbuka.
+- **Interactive Quiz — Live Session (✅ dikodkan, rujuk Seksyen 9)** — Teacher: `quiz_list_screen.dart` ("My Quizzes") → `create_quiz_screen.dart` (tajuk, subjek, mod, soalan aneka pilihan 4 opsyen + time limit + points) → tekan quiz untuk `host_quiz_session_screen.dart` (generate join code 6-digit, waiting room dengan senarai student join secara live, kawal "Next Question"/"End Quiz", leaderboard akhir). Student: FAB "Join a Quiz" → `join_quiz_screen.dart` (masukkan join code) → `live_quiz_play_screen.dart` (StreamBuilder ikut `quizSessions.status`/`currentQuestionIndex`, countdown timer disegerakkan guna `currentQuestionStartedAt`, submit jawapan, leaderboard). Firestore rules ditambah untuk `quizzes`/`quizSessions` (rujuk firestore.rules) — markah dikira & ditulis client-side (had FYP yang sama macam file validation, tiada Cloud Function). UI/UX guna palet vibrant gaya Wayground/Kahoot (`quiz_theme.dart` — 4 warna+bentuk opsyen, gradient ungu, leaderboard podium dikongsi via `quiz_leaderboard_view.dart`).
+- **Interactive Quiz — Self-Paced (✅ dikodkan, rujuk Seksyen 9.6)** — Teacher pilih mod "Self-Paced"/"Both" semasa cipta quiz. Student: FAB/nav bar "Self-Paced Quizzes" → `self_paced_quiz_list_screen.dart` (senarai quiz untuk subjek dia, badge markah kalau dah submit) → `attempt_quiz_screen.dart` (jawab semua soalan sekali gus, tiada timer, submit sekali sahaja - dwi-mod Attempt/Review dalam satu skrin). `quizAttempts/{quizId}_{studentUid}` (ID deterministik, elak retake & elak keperluan index).
+- **Admin Reports (✅ dikodkan, rujuk Seksyen 5.11)** — `admin_reports_screen.dart` gantikan placeholder "Coming Soon" — statistik sebenar (users ikut role, chats, quizzes, quiz sessions, quiz attempts, warning letters, subjek) guna Firestore `count()` aggregation query, tiada dokumen sebenar dibaca, tiada index baru diperlukan.
+- **Push Notifications (✅ dikodkan & AKTIF sepenuhnya di Web, rujuk Seksyen 5.12)** — Cloud Functions (`functions/index.js`, projek Node.js BARU, infra berasingan dari Flutter/Firestore rules) hantar push notification sebenar bila mesej chat baru dihantar (`onNewChatMessage`) atau warning letter baru dicipta (`onNewWarningLetter`) — Firestore sendiri TAK BOLEH panggil FCM API terus, perlukan konteks server. `lib/utils/push_notifications.dart` daftar/buang token peranti (`users/{uid}.fcmTokens`) pada login/logout. VAPID key Web dah diisi & dideploy.
+- **Settings Screen (✅ dikodkan, rujuk Seksyen 5.14)** — `settings_screen.dart`, boleh diakses semua role (ikon gear dalam nav bar Teacher/Student/Parent, kad menu untuk Admin): Edit Profile (nama), Change Password (perlukan re-auth), Push Notifications on/off (`users/{uid}.pushEnabled`), Log Out, Delete Account (self-service, re-auth + padam dokumen Firestore + akaun Firebase Auth sendiri — BEZA dengan had "Admin Delete User" sebab user padam akaun DIA SENDIRI tak perlukan Admin SDK). Teacher sahaja dapat seksyen tambahan "Leave / Holiday" (julat tarikh cuti, auto Off-Duty untuk tempoh tu — rujuk 5.14).
 
 ### 4.2 Status: Dalam Reka Bentuk (Figma) — Belum Dikodkan 🔲
 
 Berdasarkan prototype Figma, ciri-ciri berikut telah direka tetapi belum dilaksanakan dalam kod:
 
-- **On-Duty / Off-Duty Toggle (Manual)** — teacher boleh tukar status sendiri, bukan hanya bergantung jadual automatik
-- **Interactive Quiz — Self-Paced** — mod kedua dari Seksyen 9 (student buat quiz bila-bila masa macam homework, guna koleksi `quizAttempts`) — belum dibina, Live Session je siap setakat ni
-- **Class Performance Overview** — dashboard teacher memaparkan:
-  - Overall class health score (%)
-  - Kategori: Safe / At-Risk / Barred
-  - Breakdown performance per-student dengan trend (Steady / Dropping / Critical)
-  - Butang "Send Warning Letter" terus dari dashboard
-- **Attendance Overview (Student)** — student boleh lihat attendance rate sendiri, jumlah kelas dihadiri, dan status warning jika attendance rendah
-- **Parent Module** — parent boleh:
-  - Lihat profil & attendance anak
-  - Chat terus dengan teacher berkaitan hal akademik anak
-  - Terima notifikasi warning letter
-- **Working Hours Custom Per-Teacher** — setiap teacher set jadual sendiri (bukan global untuk semua), sebagai penambahbaikan masa depan
-- **Notification Settings** — toggle push notification & attendance alert
-- **Security & Privacy Settings** — sorok nombor telefon peribadi, tukar password
-- **Admin: Full Account Deletion** — "Delete User" dalam Manage Users semasa hanya buang dokumen Firestore; padam akaun **Firebase Authentication** sepenuhnya perlukan Admin SDK/Cloud Function (client-side Flutter tak boleh padam akaun Auth user lain secara terus, atas sebab keselamatan Firebase)
-- **Admin: Reports & Monitor System Activities** — placeholder "Coming Soon" dalam Admin Dashboard semasa; bergantung pada data Attendance & Performance yang belum wujud
+- **Working Hours Custom Per-Teacher** — setiap teacher set jadual JAM harian sendiri (contoh 10AM-6PM, bukan 9AM-5PM global untuk semua), sebagai penambahbaikan masa depan. **Beza dengan Leave/Holiday (✅ dah dibina, rujuk 5.14)**: Leave/Holiday ialah julat TARIKH auto Off-Duty, bukan jadual jam harian custom.
+- **Admin: Full Account Deletion** — "Delete User" dalam Manage Users semasa hanya buang dokumen Firestore; padam akaun **Firebase Authentication** sepenuhnya perlukan Admin SDK/Cloud Function (client-side Flutter tak boleh padam akaun Auth user lain secara terus, atas sebab keselamatan Firebase). **Belum dibina** — perlukan infra Cloud Functions berasingan (Node.js project, deploy pipeline lain), keputusan sengaja ditangguh buat masa ni (rujuk perbualan sesi ni - dianggap infra risk/effort berasingan dari kerja Flutter/Firestore rules yang lain).
 
 ### 4.3 Status: Belum Dirancang / Cadangan Masa Depan 💡
 
-- Push notification sebenar (Firebase Cloud Messaging)
+Tiada item buat masa ni — Push Notification (dulu satu-satunya item di sini) dah dikodkan, rujuk 5.12.
 
 ---
 
@@ -318,25 +318,34 @@ ChatScreen dibuka
    → Semasa hantar mesej: double-check office hour untuk elak race condition
 ```
 
-### 5.4 Aliran Overtime Mode (✅ Sudah dilaksanakan — client-side)
+### 5.4 Aliran Overtime Mode & Schedule Message (✅ Sudah dilaksanakan — client-side)
 
 ```
 ChatScreen dibuka
    → Fetch role user semasa dari users/{uid} (_loadCurrentUserRole)
-   → Jika role == "Teacher" DAN chat locked:
-        - Papar butang "Reply Now (Overtime Mode)" & "Schedule Reply"
+   → Jika chat locked (rujuk _computeIsOfficeHour(), 5.10):
+        - Role == "Teacher" → papar DUA butang: "Reply Now (Overtime Mode)"
+          & "Schedule Reply"
+        - Role == "Student"/"Parent" → papar SATU butang sahaja: "Schedule
+          Message" (label je beza, mekanisme di bawah 100% sama)
 
 Jika teacher tekan "Reply Now (Overtime Mode)":
-   → _overtimeActive = true (state tempatan dalam ChatScreen)
+   → _overtimeActive = true (state tempatan dalam ChatScreen) - TEACHER SAHAJA,
+     sebab ni pilihan teacher secara sukarela pecah waktu sendiri; kalau
+     Student/Parent boleh buat ni juga, seluruh tujuan office hour lock hilang
    → Input field & send button unlock semula untuk sesi ini
    → Mesej seterusnya dihantar dengan flag `isOvertimeReply: true`
    → _overtimeActive auto-reset bila office hour betul-betul buka semula
 
-Jika teacher tekan "Schedule Reply":
-   → Dialog untuk taip mesej
+Jika mana-mana role tekan "Schedule Reply"/"Schedule Message" (✅ dulu
+Teacher sahaja, kini semua role, sebab seluruh pipeline di bawah sentiasa
+key ikut senderId, tiada semakan role langsung):
+   → Dialog untuk taip mesej (tajuk dialog ikut role: "Schedule Reply" untuk
+     Teacher, "Schedule Message" untuk Student/Parent)
    → Simpan ke chats/{chatId}/scheduledReplies:
         { senderId, text, scheduledFor: OfficeHours.nextOpenDateTime(), status: "pending" }
    → Dipapar sebagai senarai pending (dengan butang cancel) di atas chat
+     untuk SESIAPA yang ada scheduledReplies dia sendiri dalam chat tu
 
 Auto-hantar scheduled reply (client-side, tanpa Cloud Function):
    → Setiap kali timer 1-minit dalam ChatScreen kesan office hour
@@ -346,22 +355,51 @@ Auto-hantar scheduled reply (client-side, tanpa Cloud Function):
         - Hantar sebagai mesej biasa dengan flag `isScheduledReply: true`
         - Update status jadi "sent"
 
-Nota: sebab belum setup Cloud Functions, auto-hantar hanya berlaku bila
-ChatScreen berkaitan dibuka semula selepas office hour bertukar (bukan
-background/walaupun app tertutup). Cloud Function untuk auto-hantar
-sepenuhnya (walaupun app tertutup) kekal sebagai penambahbaikan masa depan.
+Nota: auto-hantar hanya berlaku bila ChatScreen berkaitan dibuka semula
+selepas office hour bertukar (bukan background/walaupun app tertutup) -
+sengaja kekal client-side macam ni walaupun Cloud Functions (`functions/`)
+dah wujud sekarang (dibina untuk push notification, rujuk 5.12), sebab
+memindah logik "hantar mesej" ke server perlukan reka bentuk berasingan
+(contoh: Cloud Scheduler pol berkala) di luar skop kerja terkini.
 ```
 
-### 5.5 Aliran Class Performance & Warning Letter (Cadangan — belum dikod)
+### 5.5 Aliran Class Performance & Warning Letter (✅ Sudah dilaksanakan)
 
 ```
-Teacher buka Class Performance Overview
-   → Fetch data dari performance/{subjectLevel}/students
-   → Papar overall health score & breakdown per-student
-   → Jika student trend == "Critical":
-        - Teacher tekan "Send Warning Letter"
-        - Create dokumen dalam warningLetters collection
-        - (Cadangan) Trigger notification ke Parent & Student berkaitan
+Teacher buka Class Performance (`class_performance_screen.dart`, dari nav bar TeacherDashboard)
+   → Pilih subjek dari dropdown (senarai subjek yang teacher ajar, users/{uid}.subjects)
+   → Query student yang enrolled dalam subjek tu (users where role=="Student" AND
+     subjects array-contains subjectLevel) - sama query macam Group Chat (5.2a)
+   → StreamBuilder kedua ambil performance/{subjectLevel}/students - gabung secara
+     client-side ikut uid (student yang belum ada rekod papar "Not graded yet")
+   → Papar "Class Health Score" (purata percentage student yang DAH digred sahaja)
+     + breakdown count Safe (>=70%) / At-Risk (50-69%) / Barred (<50%)
+
+Teacher tekan "%" pada row student → dialog masukkan markah baru (0-100)
+   → Sistem kira trend automatik: diff = markah_baru - markah_lama
+        - diff <= -15  → "critical"
+        - diff < 0     → "dropping"
+        - selain itu   → "steady"
+        - (tiada rekod lama / student baru digred kali pertama → "steady")
+   → Simpan ke performance/{subjectLevel}/students/{studentUid}:
+        { name, percentage, trend, lastUpdated: serverTimestamp() }
+
+Jika trend student == "critical":
+   → Row student papar butang "Send Warning Letter"
+   → Fetch users/{studentUid}.parentUid
+        - Jika tiada parentUid → papar ralat "tiada parent linked", HENTI
+   → Dialog reason (boleh edit, prefilled cadangan mesej ada nama student/subjek/markah)
+   → Teacher confirm "Send" → create dokumen warningLetters:
+        { studentUid, teacherUid, parentUid, subjectLevel, reason,
+          sentAt: serverTimestamp(), acknowledged: false }
+
+Setiap row student ada butang "History" → bottom sheet senarai warningLetters
+   milik student tu (query studentUid == uid, orderBy sentAt desc)
+
+Nota: `acknowledged` sentiasa `false` semasa dicipta - tiada UI untuk Parent/Student
+tandakan "dah baca" lagi sebab Parent Module & Student-side warning view belum
+dibina (rujuk 4.2). Firestore rule untuk field ni dah sedia (allow update terhad
+ke field `acknowledged` sahaja, oleh studentUid/parentUid) untuk bila UI tu dibina.
 ```
 
 ### 5.6 Aliran File Upload / Attachment (✅ Dikodkan & berfungsi hujung-ke-hujung)
@@ -417,17 +455,340 @@ Nota akaun Admin pertama: TIADA pilihan "Admin" dalam RegisterScreen
    3. Login semula — akan route ke AdminDashboard
 ```
 
+### 5.8 Aliran Attendance (✅ Sudah dilaksanakan)
+
+```
+Teacher buka "Take Attendance" (`take_attendance_screen.dart`, ikon dari nav bar TeacherDashboard)
+   → Pilih subjek (dropdown, dari users/{uid}.subjects) + tarikh (date picker,
+     default hari ini, tak boleh pilih tarikh masa depan)
+   → Query student enrolled dalam subjek tu (sama query macam Group Chat/Class
+     Performance) → untuk setiap student, get() sekali sahaja rekod attendance
+     sedia ada untuk subjek+tarikh tu (kalau ada) - default "Present" kalau
+     tiada rekod lagi
+   → Senarai student papar SwitchListTile (hijau = Present, ditog individu),
+     ada butang pantas "Mark All Present" / "Mark All Absent"
+   → Tekan "Save Attendance" → satu WriteBatch, satu dokumen per student:
+        attendance/{studentUid}/records/{subject}_{yyyy-MM-dd}
+        { subject, date, status: "present"|"absent", markedBy: teacherUid,
+          markedAt: serverTimestamp() }
+     Document ID deterministik (subjek + tarikh) → tandakan attendance kali
+     kedua untuk subjek+tarikh yang sama akan OVERWRITE rekod asal (bukan
+     duplicate), supaya teacher boleh betulkan kesilapan.
+
+Student buka "My Attendance" (`attendance_overview_screen.dart`, dari nav bar
+   atau FAB StudentDashboard)
+   → StreamBuilder attendance/{myUid}/records, orderBy date descending
+   → Dropdown filter subjek ("All Subjects" atau salah satu subjek yang ada
+     rekod) - filter & kira peratus dibuat client-side (rekod seorang
+     student sentiasa kecil, tak perlukan composite index)
+   → Papar "Attendance Rate" (% dikira dari rekod yang ditapis), "X / Y
+     classes attended", dan amaran merah "Low attendance warning" kalau
+     rate < 75%
+   → Senarai rekod (tarikh, subjek, status Present/Absent bertanda ikon+warna)
+```
+
+### 5.9 Aliran Parent Module (✅ Sudah dilaksanakan)
+
+```
+Prasyarat - Admin pautkan Parent ↔ Student (sebelum ni TIADA cara buat ni
+langsung dalam app - `parentUid`/`childUid` wujud dalam skema sejak awal
+tapi tak pernah ditulis oleh mana-mana skrin, rujuk nota dalam 3.1):
+   Admin buka Manage Users → row dengan role "Parent" → menu "..." →
+   "Link Child" → LinkParentChildScreen(parentUid, parentName)
+      → Senarai semua Student (boleh search by nama)
+      → Admin tekan satu Student → dialog confirm →
+        SATU WriteBatch:
+           users/{parentUid}.childUid = studentUid
+           users/{studentUid}.parentUid = parentUid
+      → Kembali ke Manage Users, row Parent papar "Linked to: {nama student}"
+   (Boleh "Unlink Child" bila-bila - batch yang sama tapi FieldValue.delete()
+   pada kedua-dua field.)
+
+Parent login → ParentDashboard = ChatListScreen terus (✅ REDESIGN - dulu
+   placeholder statik "coming soon", sekarang corak sama macam Teacher/
+   Student: chat list ITU SENDIRI, bukan skrin menu depan dia)
+   → FAB "+" → bottom sheet "Message a Teacher" → UserSearchScreen
+     (targetRole: "Teacher") - sama skrin generik yang Student guna untuk
+     cari Teacher, parent boleh cari & chat dengan mana-mana teacher
+   → Nav bar (sebelah tab All/Individual/Groups):
+        - Ikon "Warning Letters" → ParentWarningLettersScreen
+        - Butang teks "My Child" → ChildOverviewScreen
+
+ChildOverviewScreen (read-only, tiada butang edit/hantar):
+   → Fetch users/{myUid}.childUid
+        - Null → papar "Your account isn't linked to a student yet.
+          Please contact an Admin to link your child." (HENTI di sini)
+   → Fetch users/{childUid} untuk nama & senarai subjek
+   → Tab "Attendance": StreamBuilder attendance/{childUid}/records - sama
+     pengiraan macam attendance_overview_screen.dart (rate, warning < 75%)
+   → Tab "Performance": untuk setiap subjek anak, get()
+     performance/{subjectLevel}/students/{childUid} - papar percentage +
+     trend (sama visual macam class_performance_screen.dart tapi tiada
+     butang "%"/"Send Warning Letter" - viewing sahaja)
+
+ParentWarningLettersScreen:
+   → Query warningLetters where parentUid == myUid, orderBy sentAt desc
+   → Setiap letter belum "acknowledged" papar butang "Mark Read" → update
+     acknowledged: true (firestore.rules dah benarkan parentUid buat ni
+     sejak modul Class Performance dibina - rujuk 5.5 - skrin ni first
+     consumer sebenar untuk field tu)
+
+Nota: TIADA perubahan firestore.rules diperlukan untuk seluruh modul ni -
+rules untuk `attendance`, `performance`, dan `warningLetters` yang
+parent-aware (guna childUid/parentUid) semuanya sudah sedia dari modul
+Attendance & Class Performance sebelum ni. Hanya SATU index Firestore baru
+diperlukan: warningLetters (parentUid ASC, sentAt DESC) - untuk query
+ParentWarningLettersScreen (index studentUid+sentAt yang sedia ada tak
+boleh dipakai sebab field equality yang berbeza).
+```
+
+### 5.10 Aliran On-Duty / Off-Duty Toggle (✅ Sudah dilaksanakan)
+
+```
+Teacher login → TeacherDashboard → AppBar ada ikon On-Duty/Off-Duty
+   (StreamBuilder live pada users/{teacherUid}.dutyStatus - ikon
+   work_outline (putih) = On-Duty, work_off_outlined (merah muda) = Off-Duty;
+   field tiada dalam dokumen = layan sebagai On-Duty)
+   → Tekan ikon → terus tukar (tiada dialog confirm, reversible & rendah
+     risiko): update users/{teacherUid}.dutyStatus ke "on_duty"/"off_duty"
+   → SnackBar mengesahkan status baru
+
+Kesan pada SEMUA chat teacher tu (chat_screen.dart, kedua-dua pihak):
+   → "Chat terbuka" kini dikira oleh _computeIsOfficeHour():
+        OfficeHours.isOfficeHourNow() DAN teacher berkaitan chat ni bukan
+        "off_duty"
+   → `_relevantTeacherUid` untuk chat tu ditentukan:
+        - Teacher tengok chat sendiri → uid dia sendiri
+        - Student/Parent tengok chat 1:1 → otherUserUid (teacher pihak lawan)
+        - Sesiapa tengok group chat → groupAdmin (teacher pencipta group)
+   → Live listen pada users/{relevantTeacherUid} - lock terus update kalau
+     teacher toggle status semasa chat screen sedang terbuka (tak perlu
+     tunggu refresh/timer 1-minit)
+   → Bila Off-Duty: banner locked papar mesej khusus "This teacher is
+     currently Off-Duty. Chat will reopen once they go back On-Duty."
+     (beza dari mesej "outside office hours" biasa) - guna UI/logic Overtime
+     Mode yang SAMA (teacher boleh "Reply Now"/"Schedule Reply" macam biasa
+     kalau nak reply walaupun set diri Off-Duty)
+   → Bila teacher toggle balik ke On-Duty semasa dalam waktu pejabat, chat
+     terus reopen (sama macam bila jadual automatik masuk waktu pejabat) -
+     _overtimeActive direset, scheduled reply yang tertunggak auto-hantar
+
+Nota: TIADA perubahan firestore.rules diperlukan - rule sedia ada untuk
+`users/{userId}` (`request.auth.uid == userId`) dah cukup untuk teacher
+tulis field `dutyStatus` pada dokumen dia sendiri.
+```
+
+### 5.11 Aliran Admin Reports (✅ Sudah dilaksanakan)
+
+```
+Admin buka Admin Dashboard → "Reports" (dulu placeholder "Coming Soon")
+   → AdminReportsScreen: 11 query Firestore `count()` aggregation
+     dijalankan serentak (Future.wait) pada collection top-level sahaja
+     (users x4 role, chats, chats where isGroup, subjectCatalog, quizzes,
+     quizSessions, quizAttempts, warningLetters) - TIADA dokumen sebenar
+     dibaca (lebih murah & pantas dari fetch+tally), TIADA composite index
+     diperlukan (setiap query paling banyak SATU filter equality)
+   → Papar dalam kad kumpulan: Users (Student/Teacher/Parent/Admin),
+     Communication (Total Chats/Group Chats), Interactive Quiz (Quizzes
+     Created/Live Sessions/Self-Paced Attempts), Academic (Subjects in
+     Catalog/Warning Letters Sent)
+   → Butang refresh (ikon) + pull-to-refresh untuk re-fetch semua count
+
+Nota skop: statistik attendance (contoh jumlah rekod attendance) sengaja
+TIDAK dimasukkan - itu perlukan collectionGroup query pada sub-collection
+`records`, yang boleh perlukan setup index collection-group berasingan;
+digugurkan untuk kekal konsisten dengan prinsip "semua query dalam skrin
+ni tak perlukan sebarang index baru".
+
+Nota bug (dijumpai lepas cuba skrin ni sebenar): `chats`, `quizAttempts`,
+dan `warningLetters` punya rules asal HANYA benarkan participant/pemilik
+sendiri baca (tiada bypass Admin macam `users`/`subjectCatalog` sedia ada) -
+count() aggregation Admin kena permission-denied pada tiga collection tu.
+Fix: tambah `|| isAdmin()` pada rule `allow read` ketiga-tiga collection tu
+(rujuk firestore.rules & Seksyen 6) - dideploy.
+```
+
+### 5.12 Aliran Push Notifications (✅ Sudah dilaksanakan — ⚠️ satu langkah manual belum siap untuk Web)
+
+```
+Prasyarat infra - Cloud Functions (BUKAN Flutter/Firestore rules, projek
+Node.js berasingan di `functions/`, pertama kali dipakai dalam projek ni):
+   → functions/package.json + functions/index.js (firebase-admin,
+     firebase-functions v2)
+   → firebase.json ditambah blok "functions" (source: "functions")
+   → npm install dalam functions/, firebase deploy --only functions
+   → Nota deploy: kali PERTAMA guna Cloud Functions 2nd Gen, deploy mula-mula
+     gagal dengan ralat "Permission denied while using the Eventarc Service
+     Agent" (IAM permission belum propagate) - retry deploy lepas beberapa
+     minit selesaikan ni, seperti yang dicadang oleh mesej ralat sendiri.
+   → firebase functions:artifacts:setpolicy (atau deploy --force) untuk
+     setup cleanup policy Artifact Registry (imej container Cloud Build lama
+     auto-padam lepas 1 hari - elak kos storan terkumpul)
+
+Client (lib/utils/push_notifications.dart):
+   → registerPushToken() dipanggil lepas login (login_screen.dart) &
+     register (register_screen.dart) berjaya - minta permission notifikasi
+     (FirebaseMessaging.requestPermission()), ambil token peranti
+     (getToken()), simpan ke users/{uid}.fcmTokens guna arrayUnion (BUKAN
+     overwrite - satu akaun boleh log masuk banyak peranti/tab serentak)
+   → unregisterPushToken() dipanggil SEBELUM signOut() (chat_list_screen.dart
+     _logout, admin_dashboard.dart) - buang token peranti tu sahaja
+     (arrayRemove) supaya peranti kongsi/awam tak terus dapat notifikasi
+     untuk akaun yang dah log keluar
+   → Semua panggilan best-effort (try/catch senyap) - browser tak
+     sokong/permission ditolak/VAPID key tiada TAK PERNAH sekat proses
+     login/logout, sama falsafah macam unread_badge.dart
+   → main.dart: FirebaseMessaging.onMessage (mesej masuk semasa app dibuka
+     & fokus) papar SnackBar guna rootScaffoldMessengerKey global - FCM
+     hanya auto-papar notifikasi sistem bila app di background/tertutup,
+     jadi ini SATU-SATUNYA cara push nampak semasa app aktif
+
+Server (functions/index.js, dua trigger):
+   → onNewChatMessage: Firestore trigger pada
+     chats/{chatId}/messages/{messageId} onCreate - fetch dokumen chat induk
+     untuk senarai participants, keluarkan sender, untuk setiap penerima
+     fetch fcmTokens dia, hantar via messaging.sendEachForMulticast()
+     (tajuk = nama group/pengirim, badan = teks mesej atau "📎 nama fail").
+     Liputi SEMUA jenis mesej (biasa, quick reply, overtime, scheduled
+     reply auto-hantar) sebab semua akhirnya jadi satu dokumen biasa dalam
+     sub-collection yang sama.
+   → onNewWarningLetter: Firestore trigger pada warningLetters/{letterId}
+     onCreate - hantar ke parentUid punya fcmTokens. Ini penuhi baris
+     "Terima notifikasi warning letter" dari skop asal Parent Module
+     (Seksyen 4.1) yang sebelum ni menunggu prasyarat push notification ni.
+   → Kedua-dua trigger auto-bersihkan token yang FCM lapor sebagai
+     invalid/not-registered (arrayRemove) supaya fcmTokens tak membesar
+     tanpa had dengan peranti mati/uninstall
+
+✅ LANGKAH MANUAL SIAP: VAPID key Web dijana oleh user dari Firebase Console
+(Project Settings > Cloud Messaging > Web configuration > "Generate key
+pair" - langkah ni MEMANG hanya boleh dibuat oleh manusia, Firebase
+CLI/automasi tiada cara jana ni) dan diisi dalam `_webVapidKey`
+(lib/utils/push_notifications.dart). Web rebuilt (`flutter build web`) &
+redeployed ke Hosting supaya key tu masuk dalam JS bundle sebenar - push
+notification kini AKTIF sepenuhnya di Web.
+Android/iOS TAK pernah terjejas oleh had VAPID ni (guna google-services.json
+/ GoogleService-Info.plist sendiri) - tapi app ni belum pernah dibina/diuji
+untuk Android/iOS dalam sesi ni (semua build & deploy `flutter build web`
+sahaja setakat ni).
+```
+
+### 5.13 Nota Pembetulan Bug: Quiz (Live Session) Auto "Sign In Balik" Lepas Finish
+
+```
+Symptom: student tekan "Done" pada leaderboard akhir lepas quiz Live Session
+tamat → app papar semula WelcomeScreen/LoginScreen macam kena log out,
+walaupun sesi Firebase Auth sebenarnya MASIH sah (bukan signOut() sebenar).
+
+Punca: login_screen.dart guna Navigator.pushReplacement() (bukan
+pushAndRemoveUntil()) untuk route ke dashboard lepas login berjaya - ni
+GANTIKAN LoginScreen sahaja di puncak stack, tapi WelcomeScreen (route
+PERTAMA, dari MaterialApp.home) kekal terkubur di dasar navigator stack
+untuk SELAMA-LAMANYA. live_quiz_play_screen.dart punya leaderboard "Done"
+guna Navigator.popUntil(context, (route) => route.isFirst) - ni pop
+SEMUA route sehingga sampai balik ke WelcomeScreen tu (route pertama),
+bukan StudentDashboard macam yang dijangka.
+
+Fix (✅ dua bahagian):
+   1. live_quiz_play_screen.dart: tukar popUntil(isFirst) → Navigator.pop()
+      sahaja (satu tahap) - betul sebab join_quiz_screen.dart → sini pun
+      pushReplacement (bukan push biasa), jadi satu pop sahaja dah cukup
+      pulang terus ke StudentDashboard. Sama macam
+      host_quiz_session_screen.dart punya "Done" (Teacher side) yang
+      memang dah betul dari awal (Navigator.pop() sahaja).
+   2. login_screen.dart: tukar pushReplacement() → pushAndRemoveUntil()
+      (sama pattern macam register_screen.dart yang MEMANG dah betul dari
+      awal) - ni bersihkan WelcomeScreen/LoginScreen terus dari stack lepas
+      login berjaya, punca masalah dihapuskan terus (bukan sekadar patch
+      simptom di satu tempat) - mana-mana popUntil(isFirst) lain (kalau ada
+      di masa depan) takkan boleh terjebak isu yang sama lagi.
+```
+
+### 5.14 Aliran Settings (✅ Sudah dilaksanakan)
+
+```
+Sesiapa yang login → ikon gear "Settings" (nav bar Teacher/Student/Parent,
+   kad menu Admin) → SettingsScreen (StreamBuilder pada users/{uid} sendiri)
+
+Edit Profile:
+   → Ikon pensil pada kad profil → dialog nama → update users/{uid}.name
+     (rule sedia ada `request.auth.uid == userId` dah cukup)
+
+Change Password:
+   → Dialog: Current Password, New Password, Confirm New Password
+   → Validasi tempatan: New Password >= 6 aksara, Confirm mesti sepadan
+   → _reauthenticate(currentPassword): EmailAuthProvider.credential(email,
+     currentPassword) → user.reauthenticateWithCredential() - WAJIB sebab
+     Firebase tolak operasi sensitif (updatePassword) kalau sesi login dah
+     "lapuk" (ralat requires-recent-login)
+   → Kalau re-auth gagal (password salah) → papar ralat, HENTI
+   → user.updatePassword(newPassword)
+
+Leave / Holiday (Teacher sahaja, rujuk juga nota di 4.2 pasal beza dengan
+"Working Hours Custom Per-Teacher"):
+   → showDateRangePicker() (widget terbina-dalam Flutter) → pilih tarikh
+     mula & akhir
+   → Simpan users/{uid}.leaveStart (00:00:00 tarikh mula) & .leaveEnd
+     (23:59:59 tarikh akhir) sebagai Timestamp
+   → Kesan: chat_screen.dart punya _computeIsOfficeHour() kini check TIGA
+     syarat (office hour automatik DAN bukan Off-Duty manual DAN bukan
+     dalam tempoh cuti) - rujuk 5.10 untuk dua syarat pertama. Listener
+     _watchTeacherDutyStatus() yang sama (live pada dokumen teacher) kini
+     tangkap leaveStart/leaveEnd sekali dengan dutyStatus - tiada listener
+     berasingan diperlukan.
+   → Banner locked papar mesej khusus "This teacher is on leave until
+     {tarikh}." (beza dari mesej Off-Duty manual atau luar waktu pejabat)
+   → Butang "Clear leave dates" (FieldValue.delete() kedua-dua field) papar
+     bila leave dates sedang aktif
+   → teacher_dashboard.dart punya ikon duty toggle turut kesan status cuti
+     (ikon beach_access berasingan) walaupun dutyStatus manual still
+     "on_duty" - dua field ni tak saling bergantung, jadi UI perlu papar
+     status EFEKTIF (mana-mana satu true = locked), bukan sekadar dutyStatus
+     mentah
+
+Push Notifications on/off:
+   → SwitchListTile → update users/{uid}.pushEnabled (true/false)
+   → true → panggil registerPushToken() (lib/utils/push_notifications.dart)
+   → false → panggil unregisterPushToken()
+   → registerPushToken() kini SEMAK dulu pushEnabled sebelum minta izin/
+     daftar token - kalau user dah matikan dari Settings, login semula pada
+     peranti yang sama TAK akan diam-diam aktifkan balik
+
+Log Out:
+   → unregisterPushToken() → FirebaseAuth.instance.signOut() →
+     pushAndRemoveUntil ke LoginScreen (bersihkan stack, rujuk 5.13)
+
+Delete Account (self-service - BEZA dengan had "Admin Delete User" di 4.2,
+rujuk juga 5.7):
+   → Dialog amaran + medan Password
+   → _reauthenticate(password) - WAJIB sebelum operasi sensitif
+     (currentUser.delete() perlukan sesi "baru")
+   → unregisterPushToken() → users/{uid}.delete() (dokumen Firestore) →
+     currentUser.delete() (akaun Firebase Authentication SENDIRI)
+   → pushAndRemoveUntil ke WelcomeScreen
+   → Nota skop: Firebase BENARKAN user padam akaun Auth DIA SENDIRI
+     client-side (tiada Admin SDK diperlukan) - ni BEZA sepenuhnya dengan
+     Admin cuba padam akaun ORANG LAIN (perlukan Cloud Function, rujuk 4.2).
+     TIADA cleanup rentas-akaun (contoh: kosongkan childUid pada dokumen
+     Parent kalau Student yang dipadam ada parentUid) - trade-off diterima,
+     sama macam had sedia ada "Admin Delete User tak sentuh Firebase Auth".
+```
+
 ---
 
 ## 6. Firestore Security Rules (Ringkasan)
 
 - **Fungsi `isAdmin()`** — helper yang check role user semasa dari `users/{uid}` sama ada `"Admin"`; digunakan dalam rules `users` dan `subjectCatalog`
-- `users` — boleh dibaca oleh sesiapa yang login; boleh diedit oleh pemilik akaun sendiri **ATAU** oleh Admin (guna `isAdmin()`)
+- `users` — boleh dibaca oleh sesiapa yang login; boleh diedit oleh pemilik akaun sendiri **ATAU** oleh Admin (guna `isAdmin()`) — `write` dalam Firestore rules meliputi create/update/DELETE, jadi rule sedia ada ni juga yang benarkan self-delete akaun dari Settings (rujuk 5.14), tiada rule berasingan diperlukan. Rule sedia ada ni cukup untuk Admin tulis `parentUid`/`childUid` pada DUA dokumen user berlainan dalam satu batch (link_parent_child_screen.dart, rujuk 5.9) — tiada perubahan rule diperlukan sebab `isAdmin()` benarkan Admin tulis mana-mana dokumen `users`. Sama juga untuk `fcmTokens`/`pushEnabled`/`leaveStart`/`leaveEnd` (rujuk 5.12/5.14) — user tulis field-field tu pada dokumen sendiri sahaja, rule sedia ada dah cukup, tiada perubahan diperlukan untuk seluruh Settings screen
 - `subjectCatalog` — boleh dibaca oleh sesiapa yang login; hanya Admin boleh tulis (tambah/edit/padam)
-- `chats` — hanya participant yang terlibat boleh baca/tulis
+- `chats` — hanya participant yang terlibat boleh baca/tulis, ATAU Admin boleh baca (ditambah untuk `admin_reports_screen.dart`'s `count()` aggregation, rujuk 5.11 - awalnya terlepas, punca bug permission-denied bila Reports mula-mula dibina)
 - `chats/{chatId}/messages` — mesej hanya boleh dicipta (bukan edit/padam), dan `senderId` mesti padan dengan pengguna yang login
 - `chats/{chatId}/scheduledReplies` — hanya participant boleh baca; hanya pemilik (`senderId` == uid login) boleh cipta/kemaskini/padam (untuk Overtime Mode "Schedule Reply")
-- `attendance`, `performance`, `warningLetters` — (cadangan) hanya teacher berkaitan & Firestore Admin SDK (server-side) boleh tulis; student/parent hanya boleh baca data berkaitan diri sendiri/anak sendiri
+- **Fungsi `teachesSubject(subject)`** — helper yang check `subject` tu ada dalam `users/{uid}.subjects` user semasa; digunakan dalam rules `performance` dan `attendance`
+- `performance/{subjectLevel}/students` — boleh dibaca oleh sesiapa yang login; hanya teacher yang mengajar subjectLevel tu (`teachesSubject()`) boleh tulis
+- `warningLetters` — boleh dibaca oleh teacher yang hantar, student berkaitan, parent student tu, ATAU Admin (rujuk 5.11); hanya boleh dicipta oleh teacher (`teacherUid` mesti padan uid login); `update` terhad ke field `acknowledged` sahaja, oleh studentUid/parentUid (rujuk 5.5)
+- `attendance/{studentUid}/records` — boleh dibaca oleh student berkaitan, teacher yang mengajar subjek rekod tu, atau parent student tu; hanya boleh dicipta/dikemaskini oleh teacher yang mengajar subjek dalam rekod tu (rujuk 5.8). Rule guna short-circuit `resource == null ||` supaya teacher boleh `get()` rekod yang mungkin belum wujud (semak dah tandakan ke belum) tanpa kena nafi
+- `quizAttempts/{attemptId}` — hanya student pemilik (`studentUid`) boleh baca/cipta/kemaskini attempt dia sendiri, ATAU Admin boleh baca (rujuk 9.4/9.6/5.11); ID dokumen deterministik jadi tiada isu batch-timing macam `performance`/`attendance`
 - **Firebase Storage** (`chats/{chatId}/attachments/{fileName}`) — hanya participant chat berkaitan boleh baca/tulis; had saiz fail 10MB dikuatkuasakan di peringkat rules — rujuk Seksyen 8.8
 
 ---
@@ -447,8 +808,8 @@ lib/
 │   ├── login_screen.dart
 │   ├── student_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
 │   ├── teacher_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
-│   ├── parent_dashboard.dart            // placeholder, chat module belum dibina
-│   ├── user_search_screen.dart          // ✅ generik: cari Teacher (Student) atau Student (Teacher), papar profile/mula chat
+│   ├── parent_dashboard.dart            // ✅ = ChatListScreen dikonfigur (bukan placeholder lagi, rujuk 5.9)
+│   ├── user_search_screen.dart          // ✅ generik: cari Teacher (Student/Parent) atau Student (Teacher), papar profile/mula chat
 │   ├── user_profile_screen.dart         // ✅ profile read-only + butang "Message"
 │   ├── chat_screen.dart                 // ✅ tajuk AppBar boleh tekan → profile (1:1) / group info (group)
 │   ├── chat_list_screen.dart            // ✅ tab All/Individual/Groups + unread badge
@@ -457,28 +818,43 @@ lib/
 │   ├── add_group_members_screen.dart    // ✅ groupAdmin sahaja: tambah ahli baru ke group sedia ada
 │   ├── full_image_screen.dart           // ✅ viewer penuh skrin untuk attachment jenis image (pinch-to-zoom)
 │   ├── admin_dashboard.dart              // ✅ hub Admin, EN
-│   ├── manage_users_screen.dart          // ✅ Admin: CRUD users + Edit Subjects, EN
+│   ├── manage_users_screen.dart          // ✅ Admin: CRUD users + Edit Subjects + Link/Unlink Child, EN
+│   ├── link_parent_child_screen.dart     // ✅ Admin: pautkan akaun Parent ↔ Student
 │   ├── manage_subjects_screen.dart       // ✅ Admin: CRUD subjectCatalog, EN
-│   ├── create_quiz_screen.dart          // ✅ Teacher: cipta quiz (soalan 4 opsyen)
-│   ├── quiz_list_screen.dart            // ✅ Teacher: "My Quizzes", mula host session
+│   ├── create_quiz_screen.dart          // ✅ Teacher: cipta quiz (soalan 4 opsyen, pilih mod)
+│   ├── quiz_list_screen.dart            // ✅ Teacher: "My Quizzes", mula host session (Live/Both sahaja)
 │   ├── host_quiz_session_screen.dart    // ✅ Teacher: join code, waiting room, kawal soalan, leaderboard
 │   ├── join_quiz_screen.dart            // ✅ Student: masukkan join code
 │   ├── live_quiz_play_screen.dart       // ✅ Student: main quiz real-time, timer, leaderboard
 │   ├── quiz_leaderboard_view.dart       // ✅ widget leaderboard/podium dikongsi host + student
-│   ├── class_performance_screen.dart   (cadangan — belum wujud)
-│   ├── attendance_overview_screen.dart (cadangan — belum wujud)
-│   └── settings_screen.dart            (cadangan — belum wujud)
+│   ├── self_paced_quiz_list_screen.dart // ✅ Student: senarai quiz Self-Paced untuk subjek dia
+│   ├── attempt_quiz_screen.dart         // ✅ Student: jawab/review quiz Self-Paced (dwi-mod)
+│   ├── class_performance_screen.dart    // ✅ Teacher: health score, trend/kategori per-student, Warning Letter
+│   ├── take_attendance_screen.dart      // ✅ Teacher: tandakan Present/Absent ikut subjek+tarikh
+│   ├── attendance_overview_screen.dart  // ✅ Student: attendance rate, filter subjek, senarai rekod
+│   ├── child_overview_screen.dart       // ✅ Parent: tab Attendance + Performance anak (read-only)
+│   ├── parent_warning_letters_screen.dart // ✅ Parent: senarai warning letter anak, Mark Read
+│   ├── admin_reports_screen.dart        // ✅ Admin: statistik sistem (count aggregation)
+│   └── settings_screen.dart             // ✅ Semua role: profile, password, push toggle, leave dates (Teacher), logout, delete account
 └── utils/
     ├── office_hours.dart
     ├── unread_badge.dart               // ✅ conditional export (web/stub)
     ├── unread_badge_stub.dart          // ✅ no-op untuk platform bukan web
     ├── unread_badge_web.dart           // ✅ Badging API via dart:js_interop
     ├── file_validator.dart             // ✅ rujuk Seksyen 8
-    └── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
+    ├── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
+    └── push_notifications.dart         // ✅ daftar/buang token FCM, rujuk Seksyen 5.12
 
 assets/
 └── images/
     └── tuturedu_logo.png               // ✅ didaftar dalam pubspec.yaml
+
+web/
+└── firebase-messaging-sw.js            // ✅ service worker Web Push, rujuk Seksyen 5.12
+
+functions/                              // ✅ projek Node.js BERASINGAN (bukan lib/, bukan Dart/Flutter)
+├── package.json                        // firebase-admin, firebase-functions v2
+└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter, rujuk Seksyen 5.12
 ```
 
 > **Nota bahasa UI:** Semua skrin (`lib/screens/`, `lib/utils/`, `lib/models/`) kini menggunakan Bahasa Inggeris sepenuhnya, termasuk code comments. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matrix") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
@@ -576,15 +952,15 @@ match /chats/{chatId}/attachments/{fileName} {
 
 ---
 
-## 9. Interactive Quiz (✅ Live Session dikodkan — Self-Paced belum dibina)
+## 9. Interactive Quiz (✅ Live Session + Self-Paced kedua-duanya dikodkan)
 
-Ciri quiz gaya Wayground/Kahoot/Quizizz — teacher cipta quiz dengan soalan aneka pilihan, student jawab. Menyokong **dua mod**: **Live Session** ✅ (semua student join serentak dengan join code, real-time, ada leaderboard — rujuk fail di 4.1) dan **Self-Paced** 🔲 (student buat bila-bila masa sendiri, macam homework — belum dibina).
+Ciri quiz gaya Wayground/Kahoot/Quizizz — teacher cipta quiz dengan soalan aneka pilihan, student jawab. Menyokong **dua mod**: **Live Session** ✅ (semua student join serentak dengan join code, real-time, ada leaderboard — rujuk fail di 4.1) dan **Self-Paced** ✅ (student buat bila-bila masa sendiri, macam homework — rujuk 9.6). Teacher pilih mod semasa cipta quiz (`create_quiz_screen.dart` — chip "Live Session" / "Self-Paced" / "Both") — field `mode` sama untuk kedua-dua, soalan (`questions` sub-collection) dikongsi.
 
 ### 9.1 Skop
 
-- Teacher cipta quiz (tajuk, subjek/tahap, senarai soalan aneka pilihan 4 opsyen)
+- Teacher cipta quiz (tajuk, subjek/tahap, mod, senarai soalan aneka pilihan 4 opsyen)
 - **Live Session**: teacher "host" sesi, dapat join code (contoh 6-digit), student masuk guna code, semua jawab soalan yang sama serentak dengan timer, leaderboard real-time
-- **Self-Paced**: student browse quiz yang available untuk subjek dia, buat sendiri bila-bila, submit, terus dapat markah & boleh review jawapan
+- **Self-Paced**: student browse quiz yang available untuk subjek dia, buat sendiri bila-bila (tiada timer), submit, terus dapat markah & boleh review jawapan — **tiada retake** (satu attempt sahaja per student per quiz)
 
 ### 9.2 Struktur Firestore (Cadangan)
 
@@ -618,13 +994,14 @@ quizSessions (collection)                  // hanya untuk mod LIVE
                     ├── score: number
                     └── answers: map<questionId, { selectedIndex, correct, timeTakenMs }>
 
-quizAttempts (collection)                  // hanya untuk mod SELF-PACED
-  └── {attemptId}
+quizAttempts (collection)                  // ✅ hanya untuk mod SELF-PACED
+  └── {attemptId}                          // ✅ deterministik: "{quizId}_{studentUid}" (elak retake, tiada query/index diperlukan utk check attempt sedia ada)
         ├── quizId: string
         ├── studentUid: string
         ├── startedAt / completedAt: timestamp
-        ├── status: "in_progress" | "completed"
+        ├── status: "completed"            // ✅ hanya ditulis sekali submit (tiada draf "in_progress" disimpan - jawapan dikumpul client-side dulu)
         ├── score: number
+        ├── totalPoints: number            // ✅ ditambah semasa implementasi - jumlah points semua soalan, untuk papar "X/Y"
         └── answers: map<questionId, selectedIndex>
 ```
 
@@ -644,51 +1021,46 @@ Teacher pilih quiz → tekan "Host Live Session"
    → Status "ended" → papar leaderboard akhir (susun ikut score, descending)
 ```
 
-**Self-Paced (Student):**
+**Self-Paced (Student) — ✅ rujuk 9.6 untuk butiran pelaksanaan sebenar:**
 ```
 Student browse senarai quiz (filter ikut subjects dia dalam users/{uid}.subjects)
-   → Pilih quiz → "Start Quiz"
-   → Create dokumen quizAttempts (status "in_progress")
-   → Jawab soalan satu-satu (tiada timer, atau timer longgar optional)
-   → Submit → kira score, update status "completed"
-   → Papar markah & review jawapan (betul/salah setiap soalan)
+   → Pilih quiz → buka AttemptQuizScreen
+   → Jawab semua soalan (tiada timer, satu skrin scroll, semua soalan sekali gus)
+   → Submit → kira score client-side, terus tulis quizAttempts (status "completed")
+   → Skrin bertukar terus jadi mod REVIEW (tiada navigasi lain) — papar markah &
+     setiap soalan dengan jawapan betul/salah ditanda
 ```
 
-### 9.4 Firestore Security Rules (Cadangan)
+### 9.4 Firestore Security Rules (✅ Dideploy — rujuk firestore.rules untuk versi sebenar `quizzes`/`quizSessions`, sama macam draf asal)
 
 ```
-match /quizzes/{quizId} {
-  allow read: if request.auth != null;
-  allow write: if request.auth != null &&
-                (request.auth.uid == resource.data.createdBy || isAdmin());
-  allow create: if request.auth != null &&
-                 request.auth.uid == request.resource.data.createdBy;
-}
-
-match /quizSessions/{sessionId} {
-  allow read: if request.auth != null;
-  allow write: if request.auth != null && request.auth.uid == resource.data.hostUid;
-
-  match /participants/{studentUid} {
-    allow read: if request.auth != null;
-    allow write: if request.auth != null && request.auth.uid == studentUid;
-  }
-}
-
 match /quizAttempts/{attemptId} {
-  allow read, write: if request.auth != null &&
-                       request.auth.uid == resource.data.studentUid;
+  allow read: if request.auth != null &&
+               request.auth.uid == resource.data.studentUid;
   allow create: if request.auth != null &&
                  request.auth.uid == request.resource.data.studentUid;
+  allow update: if request.auth != null &&
+                 request.auth.uid == resource.data.studentUid;
+  allow delete: if false;
 }
 ```
 
-### 9.5 Nota Pelaksanaan
+### 9.5 Nota Pelaksanaan (Live Session)
 
 - **Real-time sync Live Session** guna Firestore `StreamBuilder` (sama pattern macam Chat) — teacher push `currentQuestionIndex`, semua student listen dan auto-update UI bila soalan bertukar
 - **Join code collision**: semasa generate 6-digit code, elok check dulu takde sesi lain yang aktif dengan code sama (query `quizSessions` where `joinCode == code AND status == "active"`)
 - **Leaderboard** boleh dikira on-the-fly dari `participants` sub-collection (sort by `score` descending) — tak perlu simpan leaderboard berasingan
-- Ciri ni **belum masuk timeline semasa** — akan diletak dalam Gantt chart bila kau ready nak mula (cadangan: lepas Quick Reply chips & Class Performance, sebelum Attendance/Parent module, sebab quiz lebih "core" untuk value proposition app berbanding attendance)
+
+### 9.6 Nota Pelaksanaan (✅ Self-Paced)
+
+- `create_quiz_screen.dart` — teacher pilih mod via `ChoiceChip` (Live Session/Self-Paced/Both), simpan ke `quizzes.mode`. Field `timeLimitSeconds` per-soalan kekal dalam borang walaupun tak dipakai untuk Self-Paced (tiada timer) - tak berbaloi buang secara bersyarat untuk 1 field yang harmless bila diabaikan.
+- `self_paced_quiz_list_screen.dart` (Student) — query `quizzes where mode whereIn ['self_paced','both']` (**hanya SATU** klausa `whereIn`/`in` dibenarkan Firestore setiap query - tak boleh gabung dengan `subjectLevel whereIn [...]` sekali). Jadi subjek pelajar ditapis **client-side** lepas fetch, bukan dalam query. Elak keperluan composite index sepenuhnya.
+- Setiap row list guna `FutureBuilder` `get()` sekali ke `quizAttempts/{quizId}_{studentUid}` (ID deterministik) untuk papar badge markah kalau dah submit, atau chevron kalau belum - tiada query, tiada index.
+- `attempt_quiz_screen.dart` (Student) — skrin **dwi-mod** dalam satu widget tree:
+  - **Mod Attempt**: semua soalan dipapar sekali (bukan satu-satu), pilih jawapan (grid opsyen berwarna sama macam Live Session), butang "Submit Quiz" aktif hanya lepas semua soalan dijawab, dialog confirm sebelum hantar (tak boleh ubah lepas submit).
+  - **Mod Review**: auto-aktif kalau `quizAttempts/{quizId}_{studentUid}` dah wujud dengan `status: "completed"` (check sekali dalam `_load()`, atau terus lepas submit tanpa re-fetch) - papar header markah (gradient ungu) + setiap opsyen ditanda betul/salah (border putih + check untuk jawapan betul, silang untuk pilihan salah student), tiada input lagi.
+- **Tiada retake**: sebab ID attempt deterministik, submit kali kedua akan overwrite (bukan create baru) - tapi UI tak pernah benarkan submit kali kedua sebab mod Review tak papar butang Submit langsung.
+- Firestore rules (`quizAttempts`) tak perlukan `get()` ke dokumen lain (unlike `attendance`) sebab create/update rule check terus `request.resource.data.studentUid`/`resource.data.studentUid` - tiada isu "belum wujud lagi" macam yang dijumpai untuk Class Performance/Attendance.
 
 ---
 
@@ -708,14 +1080,17 @@ match /quizAttempts/{attemptId} {
 - [x] Group Chat (teacher cipta group ikut subjek, pilih student secara manual)
 - [x] File upload dengan validation 3-lapisan (extension + saiz + magic number) — rujuk Seksyen 8. Firebase Storage dah enabled & berfungsi hujung-ke-hujung
 - [x] Quick Reply chips
-- [x] Interactive Quiz — Live Session (rujuk Seksyen 9); Self-Paced belum dibina
-- [ ] On-Duty/Off-Duty manual toggle
-- [ ] Class Performance Overview + Warning Letter system
-- [ ] Attendance Overview (Student)
-- [ ] Modul Parent (chat + monitoring)
+- [x] Interactive Quiz — Live Session (rujuk Seksyen 9)
+- [x] Interactive Quiz — Self-Paced (rujuk Seksyen 9.6)
+- [x] Class Performance Overview + Warning Letter system (rujuk Seksyen 5.5)
+- [x] Attendance (Take Attendance + Attendance Overview, rujuk Seksyen 5.8)
+- [x] Modul Parent (Admin Link/Unlink Child, ParentDashboard chat, Child Overview, Warning Letters, rujuk Seksyen 5.9)
+- [x] On-Duty/Off-Duty manual toggle (rujuk Seksyen 5.10)
+- [x] Admin Reports (statistik sistem, rujuk Seksyen 5.11)
 - [x] Chat list (senarai perbualan aktif)
-- [ ] Push notification (FCM)
-- [ ] Full Admin account deletion (padam akaun Firebase Authentication, perlukan Cloud Function/Admin SDK)
+- [x] Push notification (FCM, rujuk Seksyen 5.12) — Web VAPID key dah diisi & dideploy, aktif sepenuhnya (Android/iOS tak terjejas tapi belum dibina/diuji)
+- [x] Settings Screen — Edit Profile, Change Password, Push toggle, Log Out, Delete Account (self-service), Leave/Holiday dates untuk Teacher (rujuk Seksyen 5.14)
+- [ ] Full Admin account deletion (padam akaun Firebase Authentication, perlukan Cloud Function/Admin SDK — infra Cloud Functions dah wujud sekarang dari kerja push notification, jadi ni jadi lebih senang nak tambah bila-bila; BEZA dengan self-delete akaun sendiri yang dah dibina dalam Settings)
 ---
 
 *Dokumen ini adalah rujukan hidup — kemas kini bila ciri baru siap dilaksanakan atau reka bentuk berubah.*

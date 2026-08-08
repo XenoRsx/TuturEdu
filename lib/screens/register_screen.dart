@@ -7,10 +7,12 @@
 // Note: subjects (subjects taught/enrolled) are not set here - can be
 // updated later from a profile/settings screen (not built yet).
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart' show kBrandBlue, kBrandGreen, kInkDark, kInkMuted;
+import '../utils/push_notifications.dart';
 import 'login_screen.dart';
 import 'student_dashboard.dart';
 import 'teacher_dashboard.dart';
@@ -71,6 +73,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'subjects': [],
       });
 
+      // Best-effort; never blocks the register flow (see push_notifications.dart).
+      unawaited(registerPushToken());
+
       if (!mounted) return;
 
       // 3. Navigate straight to the dashboard matching the selected role
@@ -116,7 +121,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -233,10 +240,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             prefixIcon: Icon(Icons.badge_outlined),
                           ),
                           items: _roles
-                              .map((role) => DropdownMenuItem(value: role, child: Text(role)))
+                              .map(
+                                (role) => DropdownMenuItem(
+                                  value: role,
+                                  child: Text(role),
+                                ),
+                              )
                               .toList(),
                           onChanged: (value) {
-                            if (value != null) setState(() => _selectedRole = value);
+                            if (value != null) {
+                              setState(() => _selectedRole = value);
+                            }
                           },
                         ),
                         const SizedBox(height: 24),
@@ -253,7 +267,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   ),
                                   child: const Text(
                                     'Sign Up',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                         ),
@@ -263,10 +280,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           onPressed: () {
                             Navigator.pushReplacement(
                               context,
-                              MaterialPageRoute(builder: (_) => const LoginScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const LoginScreen(),
+                              ),
                             );
                           },
-                          style: TextButton.styleFrom(foregroundColor: kBrandBlue),
+                          style: TextButton.styleFrom(
+                            foregroundColor: kBrandBlue,
+                          ),
                           child: const Text('Already have an account? Log In'),
                         ),
                       ],

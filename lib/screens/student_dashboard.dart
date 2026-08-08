@@ -6,8 +6,11 @@
 // chat) or "Join a Quiz" (enter a Live Session join code).
 
 import 'package:flutter/material.dart';
+import 'attendance_overview_screen.dart';
 import 'chat_list_screen.dart';
 import 'join_quiz_screen.dart';
+import 'self_paced_quiz_list_screen.dart';
+import 'settings_screen.dart';
 import 'user_search_screen.dart';
 
 class StudentDashboard extends StatelessWidget {
@@ -60,6 +63,40 @@ class StudentDashboard extends StatelessWidget {
                 );
               },
             ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1A2E86C1),
+                child: Icon(Icons.fact_check_outlined, color: Colors.blue),
+              ),
+              title: const Text('My Attendance'),
+              subtitle: const Text('View your attendance rate and history'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AttendanceOverviewScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1A2E86C1),
+                child: Icon(Icons.assignment_outlined, color: Colors.blue),
+              ),
+              title: const Text('Self-Paced Quizzes'),
+              subtitle: const Text('Attempt a quiz on your own time'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SelfPacedQuizListScreen(),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -71,21 +108,54 @@ class StudentDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChatListScreen(
       appBarColor: Colors.blue,
-      tabBarTrailing: Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: TextButton.icon(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const JoinQuizScreen()),
-            );
-          },
-          icon: const Icon(Icons.quiz_outlined, color: Colors.white, size: 18),
-          label: const Text(
-            'Join Quiz',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+      extraActions: [
+        IconButton(
+          tooltip: 'Settings',
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
           ),
         ),
+      ],
+      tabBarTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Self-Paced Quizzes',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SelfPacedQuizListScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.assignment_outlined, color: Colors.white),
+          ),
+          IconButton(
+            tooltip: 'My Attendance',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AttendanceOverviewScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.fact_check_outlined, color: Colors.white),
+          ),
+          IconButton(
+            tooltip: 'Join a Quiz',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const JoinQuizScreen()),
+              );
+            },
+            icon: const Icon(Icons.quiz_outlined, color: Colors.white),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openMenu(context),

@@ -9,12 +9,21 @@ class UserModel {
   // For Parent: not used (empty)
   final List<String> subjects;
 
+  // For Student: uid of the linked Parent account (set by Admin, see
+  // link_parent_child_screen.dart). Null if not linked yet.
+  final String? parentUid;
+
+  // For Parent: uid of the linked Student account. Null if not linked yet.
+  final String? childUid;
+
   UserModel({
     required this.uid,
     required this.email,
     required this.role,
     required this.name,
     this.subjects = const [],
+    this.parentUid,
+    this.childUid,
   });
 
   // Converts a Firestore Map into this Dart model object
@@ -25,6 +34,8 @@ class UserModel {
       role: map['role'] ?? 'Student',
       name: map['name'] ?? '',
       subjects: List<String>.from(map['subjects'] ?? []),
+      parentUid: map['parentUid'] as String?,
+      childUid: map['childUid'] as String?,
     );
   }
 
@@ -36,6 +47,8 @@ class UserModel {
       'role': role,
       'name': name,
       'subjects': subjects,
+      if (parentUid != null) 'parentUid': parentUid,
+      if (childUid != null) 'childUid': childUid,
     };
   }
 }

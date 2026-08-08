@@ -63,8 +63,9 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
     if (mounted) setState(() => _questions = questionsSnap.docs);
   }
 
-  DocumentReference get _sessionRef =>
-      FirebaseFirestore.instance.collection('quizSessions').doc(widget.sessionId);
+  DocumentReference get _sessionRef => FirebaseFirestore.instance
+      .collection('quizSessions')
+      .doc(widget.sessionId);
 
   Future<void> _submitAnswer(
     String questionId,
@@ -77,7 +78,9 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
     if (currentUser == null) return;
 
     final isCorrect = selectedIndex == correctIndex;
-    final participantRef = _sessionRef.collection('participants').doc(currentUser.uid);
+    final participantRef = _sessionRef
+        .collection('participants')
+        .doc(currentUser.uid);
 
     await participantRef.update({
       'answers.$questionId': {
@@ -108,12 +111,15 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                   return const Center(child: Text('Session not found.'));
                 }
 
-                final session = sessionSnapshot.data!.data() as Map<String, dynamic>;
+                final session =
+                    sessionSnapshot.data!.data() as Map<String, dynamic>;
                 final status = session['status'] ?? 'waiting';
 
                 if (status == 'waiting') {
                   return Container(
-                    decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
+                    decoration: const BoxDecoration(
+                      gradient: QuizTheme.pageGradient,
+                    ),
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -125,12 +131,19 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                               gradient: QuizTheme.heroGradient,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.hourglass_top_rounded, size: 38, color: Colors.white),
+                            child: const Icon(
+                              Icons.hourglass_top_rounded,
+                              size: 38,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           const Text(
                             'Waiting for the host to start...',
-                            style: TextStyle(fontWeight: FontWeight.w600, color: QuizTheme.primaryDark),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: QuizTheme.primaryDark,
+                            ),
                           ),
                         ],
                       ),
@@ -142,11 +155,19 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                   return StreamBuilder<QuerySnapshot>(
                     stream: _sessionRef.collection('participants').snapshots(),
                     builder: (context, participantsSnapshot) {
-                      final participants = participantsSnapshot.data?.docs ?? [];
+                      final participants =
+                          participantsSnapshot.data?.docs ?? [];
                       return QuizLeaderboardView(
                         participants: participants,
                         myUid: currentUser.uid,
-                        onDone: () => Navigator.popUntil(context, (route) => route.isFirst),
+                        // A single pop, not popUntil(isFirst) - login_screen.dart
+                        // uses pushReplacement (not pushAndRemoveUntil), so the
+                        // very first route in the stack is still WelcomeScreen;
+                        // popUntil(isFirst) would land the student back on the
+                        // login page even though their session is still valid.
+                        // JoinQuizScreen -> here was itself a pushReplacement, so
+                        // one pop correctly returns to StudentDashboard.
+                        onDone: () => Navigator.pop(context),
                       );
                     },
                   );
@@ -215,7 +236,11 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                         const SizedBox(height: 8),
                         Text(
                           question['text'] ?? '',
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     ),
@@ -237,7 +262,11 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                         ),
                         Text(
                           '$remaining',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),
@@ -254,9 +283,11 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                   mainAxisSpacing: 12,
                   childAspectRatio: 2.0,
                   children: List.generate(options.length, (i) {
-                    final isSelected = alreadyAnswered && myAnswer['selectedIndex'] == i;
+                    final isSelected =
+                        alreadyAnswered && myAnswer['selectedIndex'] == i;
                     final revealCorrectness = alreadyAnswered;
-                    final baseColor = QuizTheme.optionColors[i % QuizTheme.optionColors.length];
+                    final baseColor = QuizTheme
+                        .optionColors[i % QuizTheme.optionColors.length];
 
                     Color tileColor = baseColor;
                     double opacity = 1.0;
@@ -265,18 +296,23 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                     }
 
                     return Opacity(
-                      opacity: (alreadyAnswered || timedOut) && !isSelected && i != correctIndex ? opacity : 1.0,
+                      opacity:
+                          (alreadyAnswered || timedOut) &&
+                              !isSelected &&
+                              i != correctIndex
+                          ? opacity
+                          : 1.0,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
                         onTap: (alreadyAnswered || timedOut)
                             ? null
                             : () => _submitAnswer(
-                                  questionId,
-                                  i,
-                                  correctIndex,
-                                  points,
-                                  (timeLimit - remaining) * 1000,
-                                ),
+                                questionId,
+                                i,
+                                correctIndex,
+                                points,
+                                (timeLimit - remaining) * 1000,
+                              ),
                         child: Container(
                           decoration: BoxDecoration(
                             color: tileColor,
@@ -295,21 +331,38 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                           padding: const EdgeInsets.all(12),
                           child: Row(
                             children: [
-                              Icon(QuizTheme.optionIcons[i % QuizTheme.optionIcons.length],
-                                  color: Colors.white, size: 20),
+                              Icon(
+                                QuizTheme.optionIcons[i %
+                                    QuizTheme.optionIcons.length],
+                                color: Colors.white,
+                                size: 20,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   options[i],
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 2,
                                 ),
                               ),
                               if (revealCorrectness && i == correctIndex)
-                                const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                              if (revealCorrectness && isSelected && i != correctIndex)
-                                const Icon(Icons.cancel, color: Colors.white, size: 18),
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                              if (revealCorrectness &&
+                                  isSelected &&
+                                  i != correctIndex)
+                                const Icon(
+                                  Icons.cancel,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                             ],
                           ),
                         ),
@@ -327,22 +380,26 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                   children: [
                     Icon(
                       alreadyAnswered
-                          ? (myAnswer['correct'] == true ? Icons.check_circle : Icons.info)
+                          ? (myAnswer['correct'] == true
+                                ? Icons.check_circle
+                                : Icons.info)
                           : Icons.timer_outlined,
                       size: 18,
                       color: alreadyAnswered
-                          ? (myAnswer['correct'] == true ? Colors.green : Colors.orange)
+                          ? (myAnswer['correct'] == true
+                                ? Colors.green
+                                : Colors.orange)
                           : Colors.grey.shade600,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       alreadyAnswered
                           ? (myAnswer['correct'] == true
-                              ? 'Correct! Waiting for the next question...'
-                              : 'Answer submitted. Waiting for the next question...')
+                                ? 'Correct! Waiting for the next question...'
+                                : 'Answer submitted. Waiting for the next question...')
                           : timedOut
-                              ? "Time's up! Waiting for the next question..."
-                              : 'Tap an answer before time runs out.',
+                          ? "Time's up! Waiting for the next question..."
+                          : 'Tap an answer before time runs out.',
                       style: TextStyle(color: Colors.grey.shade700),
                     ),
                   ],

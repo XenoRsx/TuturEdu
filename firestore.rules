@@ -10,6 +10,14 @@ service cloud.firestore {
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
     }
 
+    // Helper: check sama ada user semasa (biasanya Teacher) mengajar `subject`
+    // tu - dipakai untuk rules `performance` & `attendance`
+    function teachesSubject(subject) {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             subject in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subjects;
+    }
+
     // Collection: users
     // - Sesiapa yang dah login boleh READ (perlu untuk teacher list & role check)
     // - User boleh EDIT profile dia sendiri, ATAU Admin boleh edit/delete mana-mana user
@@ -28,14 +36,15 @@ service cloud.firestore {
     }
 
     // Collection: chats
-    // - Hanya participant (student/teacher yang terlibat) boleh read chat tu
+    // - Hanya participant (student/teacher yang terlibat) boleh read chat tu,
+    //   ATAU Admin (perlu untuk count() aggregation dalam admin_reports_screen.dart)
     // - Update dibenarkan untuk mana-mana participant, KECUALI perubahan pada
     //   senarai `participants` (ahli group) - itu hanya untuk groupAdmin, atau
     //   member biasa yang buang diri sendiri sahaja ("Leave Group")
     // - Delete tidak dibenarkan langsung (tiada UI padam chat)
     match /chats/{chatId} {
       allow read: if request.auth != null &&
-                   request.auth.uid in resource.data.participants;
+                   (request.auth.uid in resource.data.participants || isAdmin());
 
       allow update: if request.auth != null &&
                      request.auth.uid in resource.data.participants &&
@@ -132,6 +141,77 @@ service cloud.firestore {
                                 request.auth.uid == studentUid;
         allow delete: if false;
       }
+    }
+
+    // Collection: performance (Class Performance Overview, rujuk BLUEPRINT.md
+    // Seksyen 5.5). subjectLevel (contoh "Add Maths Form 4") ialah document ID
+    // untuk parent collection, students ialah sub-collection.
+    // - Sesiapa yang login boleh baca (student/parent nanti perlu tengok markah sendiri)
+    // - Hanya teacher yang mengajar subjectLevel tu (senarai users/{uid}.subjects)
+    //   boleh tulis markah student dalam subjek tu
+    match /performance/{subjectLevel}/students/{studentUid} {
+      allow read: if request.auth != null;
+      allow write: if teachesSubject(subjectLevel);
+    }
+
+    // Collection: quizAttempts (Interactive Quiz - Self-Paced, rujuk
+    // BLUEPRINT.md Seksyen 9.6). Document ID deterministik
+    // "{quizId}_{studentUid}" (satu attempt sahaja per student per quiz,
+    // tiada retake) - ditulis terus dari client, tiada get() ke dokumen
+    // lain diperlukan dalam rule ni.
+    // - Hanya student pemilik attempt tu boleh baca/cipta/kemaskini, ATAU Admin
+    //   boleh baca (perlu untuk count() aggregation dalam admin_reports_screen.dart)
+    match /quizAttempts/{attemptId} {
+      allow read: if request.auth != null &&
+                   (request.auth.uid == resource.data.studentUid || isAdmin());
+      allow create: if request.auth != null &&
+                     request.auth.uid == request.resource.data.studentUid;
+      allow update: if request.auth != null &&
+                     request.auth.uid == resource.data.studentUid;
+      allow delete: if false;
+    }
+
+    // Collection: warningLetters (rujuk BLUEPRINT.md Seksyen 5.5)
+    // - Boleh dibaca oleh teacher yang hantar, student berkaitan, atau parent
+    //   student tu (tiga field terus pada dokumen, bukan get() ke rekod lain),
+    //   ATAU Admin (perlu untuk count() aggregation dalam admin_reports_screen.dart)
+    // - Hanya boleh dicipta oleh teacher (teacherUid mesti padan uid login)
+    // - Update dihadkan ke field `acknowledged` sahaja (student/parent tandakan
+    //   dah baca) - tiada UI untuk ni lagi, tapi rule sedia untuk bila dibina
+    match /warningLetters/{letterId} {
+      allow read: if request.auth != null &&
+                   (request.auth.uid == resource.data.teacherUid ||
+                    request.auth.uid == resource.data.studentUid ||
+                    request.auth.uid == resource.data.parentUid ||
+                    isAdmin());
+      allow create: if request.auth != null &&
+                     request.auth.uid == request.resource.data.teacherUid;
+      allow update: if request.auth != null &&
+                     (request.auth.uid == resource.data.studentUid ||
+                      request.auth.uid == resource.data.parentUid) &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acknowledged']);
+      allow delete: if false;
+    }
+
+    // Collection: attendance (Attendance Overview, rujuk BLUEPRINT.md Seksyen 5.8)
+    // studentUid ialah document ID parent, records ialah sub-collection.
+    // - Boleh dibaca oleh student berkaitan, teacher yang mengajar subjek rekod
+    //   tu, atau parent student tu (users/{uid}.childUid == studentUid)
+    // - `resource == null` di-check dulu (guna short-circuit ||) sebab teacher
+    //   perlu get() rekod yang MUNGKIN belum wujud lagi (cek dah tandakan ke
+    //   belum untuk tarikh tu) - tanpa ni, get() ke dokumen yang tak wujud
+    //   akan dinafikan sebab `resource.data.subject` invalid bila resource null.
+    // - Hanya boleh dicipta/dikemaskini oleh teacher yang mengajar subjek
+    //   dalam rekod tu (request.resource.data.subject)
+    match /attendance/{studentUid}/records/{recordId} {
+      allow read: if request.auth != null &&
+                   (resource == null ||
+                    request.auth.uid == studentUid ||
+                    teachesSubject(resource.data.subject) ||
+                    (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.childUid == studentUid));
+      allow create, update: if teachesSubject(request.resource.data.subject);
+      allow delete: if false;
     }
   }
 }

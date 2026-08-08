@@ -1,66 +1,108 @@
 // lib/screens/parent_dashboard.dart
 //
-// Parent home screen. The Parent chat module (view child's attendance,
-// message the child's teacher) isn't built yet - see BLUEPRINT.md section
-// 4.2 - so this stays a simple placeholder rather than pointing at a chat
-// list that would always be empty.
+// A Parent's home screen is the chat list itself, same pattern as
+// TeacherDashboard/StudentDashboard (see BLUEPRINT.md 5.9) - this configures
+// ChatListScreen with the parent's brand color and a FAB that offers
+// "Message a Teacher" (search + start a 1:1 chat, same as a Student finding
+// a Teacher). The nav bar adds two parent-specific views: "My Child"
+// (linked student's attendance/performance) and "Warning Letters".
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'login_screen.dart';
+import 'chat_list_screen.dart';
+import 'child_overview_screen.dart';
+import 'parent_warning_letters_screen.dart';
+import 'settings_screen.dart';
+import 'user_search_screen.dart';
 
 class ParentDashboard extends StatelessWidget {
   const ParentDashboard({super.key});
 
-  Future<void> _logout(BuildContext context) async {
-    await FirebaseAuth.instance.signOut();
-    if (!context.mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
+  void _openMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1AFF9800),
+                child: Icon(Icons.chat, color: Colors.orange),
+              ),
+              title: const Text('Message a Teacher'),
+              subtitle: const Text(
+                "Search your child's teacher and start a 1:1 chat",
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UserSearchScreen(
+                      targetRole: 'Teacher',
+                      title: 'Find a Teacher',
+                      accentColor: Colors.orange,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Parent Dashboard'),
-        backgroundColor: Colors.orange.shade700,
-        actions: [
+    return ChatListScreen(
+      appBarColor: Colors.orange,
+      extraActions: [
+        IconButton(
+          tooltip: 'Settings',
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          ),
+        ),
+      ],
+      tabBarTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _logout(context),
+            tooltip: 'Warning Letters',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ParentWarningLettersScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+          ),
+          IconButton(
+            tooltip: 'My Child',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChildOverviewScreen()),
+              );
+            },
+            icon: const Icon(Icons.family_restroom, color: Colors.white),
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 36,
-                backgroundColor: Colors.orange.shade100,
-                child: Icon(Icons.family_restroom, size: 36, color: Colors.orange.shade700),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Welcome, Parent!',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Viewing your child\'s attendance and messaging their '
-                'teacher is coming soon to TuturEdu.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13.5, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _openMenu(context),
+        backgroundColor: Colors.orange,
+        child: const Icon(Icons.add),
       ),
     );
   }

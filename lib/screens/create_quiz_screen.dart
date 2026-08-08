@@ -12,8 +12,10 @@ import '../utils/quiz_theme.dart';
 
 class _QuestionDraft {
   final TextEditingController textController = TextEditingController();
-  final List<TextEditingController> optionControllers =
-      List.generate(4, (_) => TextEditingController());
+  final List<TextEditingController> optionControllers = List.generate(
+    4,
+    (_) => TextEditingController(),
+  );
   int correctIndex = 0;
   int timeLimitSeconds = 20;
   int points = 100;
@@ -41,6 +43,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
   bool _saving = false;
   List<String> _teacherSubjects = [];
   String? _selectedSubject;
+  String _mode = 'live'; // 'live' | 'self_paced' | 'both'
 
   @override
   void initState() {
@@ -90,7 +93,9 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _saveQuiz() async {
@@ -132,7 +137,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
         'subjectLevel': _selectedSubject,
         'createdBy': currentUser.uid,
         'createdAt': FieldValue.serverTimestamp(),
-        'mode': 'live',
+        'mode': _mode,
         'questionCount': _questions.length,
       });
 
@@ -175,126 +180,200 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
         child: _loadingSubjects
             ? const Center(child: CircularProgressIndicator())
             : _teacherSubjects.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.menu_book_outlined, size: 56, color: Colors.grey.shade300),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No subjects assigned to your account yet. Ask an '
-                            'Admin to set your subjects before creating a quiz.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(12),
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: QuizTheme.primary.withValues(alpha: 0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Quiz Title', style: TextStyle(fontWeight: FontWeight.w700, color: QuizTheme.primaryDark)),
-                            const SizedBox(height: 6),
-                            TextField(
-                              controller: _titleController,
-                              decoration: InputDecoration(
-                                hintText: 'e.g. Add Maths Chapter 3 Quiz',
-                                filled: true,
-                                fillColor: QuizTheme.primary.withValues(alpha: 0.05),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            const Text('Subject / Class', style: TextStyle(fontWeight: FontWeight.w700, color: QuizTheme.primaryDark)),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
-                              initialValue: _selectedSubject,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: QuizTheme.primary.withValues(alpha: 0.05),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide.none,
-                                ),
-                              ),
-                              items: _teacherSubjects
-                                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                                  .toList(),
-                              onChanged: (value) => setState(() => _selectedSubject = value),
-                            ),
-                          ],
-                        ),
+                      Icon(
+                        Icons.menu_book_outlined,
+                        size: 56,
+                        color: Colors.grey.shade300,
                       ),
                       const SizedBox(height: 12),
-                      ...List.generate(_questions.length, (index) {
-                        return _buildQuestionCard(index);
-                      }),
-                      const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: _addQuestion,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Question'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: QuizTheme.primary,
-                          side: const BorderSide(color: QuizTheme.primary),
-                          minimumSize: const Size.fromHeight(46),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 52,
-                        child: ElevatedButton.icon(
-                          onPressed: _saving ? null : _saveQuiz,
-                          icon: _saving
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.save),
-                          label: Text(
-                            _saving ? 'Saving...' : 'Save Quiz',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: QuizTheme.primary,
-                            foregroundColor: Colors.white,
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                        ),
+                      const Text(
+                        'No subjects assigned to your account yet. Ask an '
+                        'Admin to set your subjects before creating a quiz.',
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: QuizTheme.primary.withValues(alpha: 0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Quiz Title',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: QuizTheme.primaryDark,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _titleController,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. Add Maths Chapter 3 Quiz',
+                            filled: true,
+                            fillColor: QuizTheme.primary.withValues(
+                              alpha: 0.05,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Subject / Class',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: QuizTheme.primaryDark,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedSubject,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: QuizTheme.primary.withValues(
+                              alpha: 0.05,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          items: _teacherSubjects
+                              .map(
+                                (s) =>
+                                    DropdownMenuItem(value: s, child: Text(s)),
+                              )
+                              .toList(),
+                          onChanged: (value) =>
+                              setState(() => _selectedSubject = value),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Mode',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: QuizTheme.primaryDark,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Live Session'),
+                              selected: _mode == 'live',
+                              onSelected: (_) => setState(() => _mode = 'live'),
+                              selectedColor: QuizTheme.primary.withValues(
+                                alpha: 0.15,
+                              ),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Self-Paced'),
+                              selected: _mode == 'self_paced',
+                              onSelected: (_) =>
+                                  setState(() => _mode = 'self_paced'),
+                              selectedColor: QuizTheme.primary.withValues(
+                                alpha: 0.15,
+                              ),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Both'),
+                              selected: _mode == 'both',
+                              onSelected: (_) => setState(() => _mode = 'both'),
+                              selectedColor: QuizTheme.primary.withValues(
+                                alpha: 0.15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...List.generate(_questions.length, (index) {
+                    return _buildQuestionCard(index);
+                  }),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _addQuestion,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Question'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: QuizTheme.primary,
+                      side: const BorderSide(color: QuizTheme.primary),
+                      minimumSize: const Size.fromHeight(46),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _saving ? null : _saveQuiz,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(
+                        _saving ? 'Saving...' : 'Save Quiz',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: QuizTheme.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
 
   Widget _buildQuestionCard(int index) {
     final q = _questions[index];
-    final badgeColor = QuizTheme.optionColors[index % QuizTheme.optionColors.length];
+    final badgeColor =
+        QuizTheme.optionColors[index % QuizTheme.optionColors.length];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -321,17 +400,28 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                   Container(
                     width: 28,
                     height: 28,
-                    decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     alignment: Alignment.center,
                     child: Text(
                       '${index + 1}',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
                     'Question ${index + 1}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: QuizTheme.primaryDark),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: QuizTheme.primaryDark,
+                    ),
                   ),
                 ],
               ),
@@ -356,21 +446,32 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Options (select the correct one)', style: TextStyle(fontSize: 12.5, color: Colors.black54)),
+          const Text(
+            'Options (select the correct one)',
+            style: TextStyle(fontSize: 12.5, color: Colors.black54),
+          ),
           RadioGroup<int>(
             groupValue: q.correctIndex,
             onChanged: (value) => setState(() => q.correctIndex = value ?? 0),
             child: Column(
               children: List.generate(4, (optionIndex) {
-                final optionColor = QuizTheme.optionColors[optionIndex % QuizTheme.optionColors.length];
+                final optionColor = QuizTheme
+                    .optionColors[optionIndex % QuizTheme.optionColors.length];
                 return Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Row(
                     children: [
-                      Icon(QuizTheme.optionIcons[optionIndex % QuizTheme.optionIcons.length],
-                          color: optionColor, size: 18),
+                      Icon(
+                        QuizTheme.optionIcons[optionIndex %
+                            QuizTheme.optionIcons.length],
+                        color: optionColor,
+                        size: 18,
+                      ),
                       const SizedBox(width: 6),
-                      Radio<int>(value: optionIndex, activeColor: QuizTheme.primary),
+                      Radio<int>(
+                        value: optionIndex,
+                        activeColor: QuizTheme.primary,
+                      ),
                       Expanded(
                         child: TextField(
                           controller: q.optionControllers[optionIndex],
@@ -399,8 +500,11 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                 child: TextFormField(
                   initialValue: q.timeLimitSeconds.toString(),
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Time limit (sec)'),
-                  onChanged: (value) => q.timeLimitSeconds = int.tryParse(value) ?? 20,
+                  decoration: const InputDecoration(
+                    labelText: 'Time limit (sec)',
+                  ),
+                  onChanged: (value) =>
+                      q.timeLimitSeconds = int.tryParse(value) ?? 20,
                 ),
               ),
               const SizedBox(width: 10),

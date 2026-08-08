@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
+import '../utils/push_notifications.dart';
 import 'teacher_dashboard.dart';
 import 'student_dashboard.dart';
 import 'parent_dashboard.dart';
@@ -45,32 +47,42 @@ class _LoginScreenState extends State<LoginScreen> {
       if (userDoc.exists) {
         String role = userDoc['role'];
 
+        // Best-effort; never blocks the login flow (see push_notifications.dart).
+        unawaited(registerPushToken());
+
         if (!mounted) return;
 
-        // 3. Route the user to the dashboard matching their role
-        if (role == 'Teacher') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const TeacherDashboard()),
-          );
-        } else if (role == 'Student') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const StudentDashboard()),
-          );
-        } else if (role == 'Parent') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ParentDashboard()),
-          );
-        } else if (role == 'Admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminDashboard()),
-          );
-        } else {
-          throw 'Unrecognized role in the system.';
+        // 3. Route the user to the dashboard matching their role.
+        // pushAndRemoveUntil (not pushReplacement) - clears WelcomeScreen/
+        // LoginScreen off the stack entirely, same as register_screen.dart's
+        // post-signup routing. Without this, WelcomeScreen stays buried at
+        // the bottom of the navigator stack forever, and any screen that
+        // later does Navigator.popUntil(context, (route) => route.isFirst)
+        // (e.g. the quiz leaderboard's "Done" button) lands back on the
+        // login page even though the session is still valid.
+        Widget destination;
+        switch (role) {
+          case 'Teacher':
+            destination = const TeacherDashboard();
+            break;
+          case 'Student':
+            destination = const StudentDashboard();
+            break;
+          case 'Parent':
+            destination = const ParentDashboard();
+            break;
+          case 'Admin':
+            destination = const AdminDashboard();
+            break;
+          default:
+            throw 'Unrecognized role in the system.';
         }
+
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => destination),
+          (route) => false,
+        );
       } else {
         throw 'User data not found in the database. Make sure the account is registered in Firestore.';
       }
@@ -174,7 +186,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             SizedBox(
                               height: 52,
                               child: _isLoading
-                                  ? const Center(child: CircularProgressIndicator())
+                                  ? const Center(
+                                      child: CircularProgressIndicator(),
+                                    )
                                   : ElevatedButton(
                                       onPressed: _login,
                                       style: ElevatedButton.styleFrom(
@@ -233,7 +247,11 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 14),
         const Text(
           'Pusat Tuisyen Arena Matrix',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kInkDark),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: kInkDark,
+          ),
         ),
         const SizedBox(height: 6),
         const Text(

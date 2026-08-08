@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../main.dart' show kInkMuted;
+import '../utils/push_notifications.dart';
 import '../utils/unread_badge.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
@@ -25,12 +26,14 @@ class ChatListScreen extends StatefulWidget {
   final Widget? floatingActionButton;
   final Color appBarColor;
   final Widget? tabBarTrailing;
+  final List<Widget>? extraActions;
 
   const ChatListScreen({
     super.key,
     this.floatingActionButton,
     this.appBarColor = Colors.blue,
     this.tabBarTrailing,
+    this.extraActions,
   });
 
   @override
@@ -55,8 +58,10 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
   Future<String> _getOtherUserName(String otherUid) async {
-    final doc =
-        await FirebaseFirestore.instance.collection('users').doc(otherUid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(otherUid)
+        .get();
     if (doc.exists) {
       return doc.data()?['name'] ?? 'User';
     }
@@ -84,7 +89,8 @@ class _ChatListScreenState extends State<ChatListScreen>
     final lastRead = Map<String, dynamic>.from(data['lastRead'] ?? {});
     final otherUids = participants.where((uid) => uid != currentUid).toList();
 
-    final readByAll = otherUids.isNotEmpty &&
+    final readByAll =
+        otherUids.isNotEmpty &&
         otherUids.every((uid) {
           final readTs = lastRead[uid];
           if (readTs is! Timestamp) return false;
@@ -99,11 +105,14 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
   int _unreadFor(Map<String, dynamic> data, String currentUid) {
-    return (data['unreadCount'] as Map<String, dynamic>?)?[currentUid] as int? ?? 0;
+    return (data['unreadCount'] as Map<String, dynamic>?)?[currentUid]
+            as int? ??
+        0;
   }
 
   Future<void> _logout(BuildContext context) async {
     setUnreadChatBadge(0);
+    await unregisterPushToken();
     await FirebaseAuth.instance.signOut();
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
@@ -193,7 +202,11 @@ class _ChatListScreenState extends State<ChatListScreen>
     );
   }
 
-  Widget _buildRow(BuildContext context, QueryDocumentSnapshot doc, String currentUid) {
+  Widget _buildRow(
+    BuildContext context,
+    QueryDocumentSnapshot doc,
+    String currentUid,
+  ) {
     final data = doc.data() as Map<String, dynamic>;
     final isGroup = data['isGroup'] == true;
 
@@ -277,7 +290,11 @@ class _ChatListScreenState extends State<ChatListScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 56, color: Colors.grey.shade300),
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 56,
+              color: Colors.grey.shade300,
+            ),
             const SizedBox(height: 12),
             Text(emptyMessage, style: TextStyle(color: Colors.grey.shade600)),
           ],
@@ -288,7 +305,8 @@ class _ChatListScreenState extends State<ChatListScreen>
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 6),
       itemCount: chats.length,
-      itemBuilder: (context, index) => _buildRow(context, chats[index], currentUid),
+      itemBuilder: (context, index) =>
+          _buildRow(context, chats[index], currentUid),
     );
   }
 
@@ -308,28 +326,36 @@ class _ChatListScreenState extends State<ChatListScreen>
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Scaffold(body: Center(child: Text('Error: ${snapshot.error}')));
+          return Scaffold(
+            body: Center(child: Text('Error: ${snapshot.error}')),
+          );
         }
         if (!snapshot.hasData) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final allChats = snapshot.data!.docs;
-        final individualChats =
-            allChats.where((d) => (d.data() as Map)['isGroup'] != true).toList();
-        final groupChats =
-            allChats.where((d) => (d.data() as Map)['isGroup'] == true).toList();
+        final individualChats = allChats
+            .where((d) => (d.data() as Map)['isGroup'] != true)
+            .toList();
+        final groupChats = allChats
+            .where((d) => (d.data() as Map)['isGroup'] == true)
+            .toList();
 
         final totalUnread = allChats.fold<int>(
           0,
           (total, doc) =>
-              total + _unreadFor(doc.data() as Map<String, dynamic>, currentUser.uid),
+              total +
+              _unreadFor(doc.data() as Map<String, dynamic>, currentUser.uid),
         );
 
         if (totalUnread != _lastNotifiedUnread) {
           _lastNotifiedUnread = totalUnread;
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => setUnreadChatBadge(totalUnread));
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => setUnreadChatBadge(totalUnread),
+          );
         }
 
         return Scaffold(
@@ -340,7 +366,10 @@ class _ChatListScreenState extends State<ChatListScreen>
                 if (totalUnread > 0) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.greenAccent.shade400,
                       borderRadius: BorderRadius.circular(12),
@@ -359,6 +388,7 @@ class _ChatListScreenState extends State<ChatListScreen>
             ),
             backgroundColor: widget.appBarColor,
             actions: [
+              ...?widget.extraActions,
               IconButton(
                 icon: const Icon(Icons.logout),
                 onPressed: () => _logout(context),
@@ -389,14 +419,24 @@ class _ChatListScreenState extends State<ChatListScreen>
           body: TabBarView(
             controller: _tabController,
             children: [
-              _buildList(context, allChats, currentUser.uid, 'No conversations yet.'),
+              _buildList(
+                context,
+                allChats,
+                currentUser.uid,
+                'No conversations yet.',
+              ),
               _buildList(
                 context,
                 individualChats,
                 currentUser.uid,
                 'No individual chats yet.',
               ),
-              _buildList(context, groupChats, currentUser.uid, 'No group chats yet.'),
+              _buildList(
+                context,
+                groupChats,
+                currentUser.uid,
+                'No group chats yet.',
+              ),
             ],
           ),
           floatingActionButton: widget.floatingActionButton,

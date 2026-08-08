@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/welcome_screen.dart';
 
@@ -10,6 +11,13 @@ void main() async {
   runApp(const MyApp());
 }
 
+// Lets FirebaseMessaging.onMessage (see below) show a SnackBar for a push
+// notification that arrives while the app is already open and focused -
+// FCM only auto-displays a system notification when the app is
+// backgrounded/closed, so this is the only way foreground pushes are ever
+// seen. Not scoped to any single screen's context, so a global key.
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 // Shared design language for the whole app, echoing welcome_screen's
 // original palette so every screen feels like one product instead of a
 // patchwork of default Material widgets.
@@ -19,12 +27,36 @@ const Color kInkDark = Color(0xFF1B3B5F);
 const Color kInkMuted = Color(0xFF6B7A8F);
 const Color kAppBackground = Color(0xFFF6F9FC);
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Best-effort: an unsupported browser/platform just never fires this.
+    FirebaseMessaging.onMessage.listen((message) {
+      final notification = message.notification;
+      if (notification == null) return;
+      rootScaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${notification.title ?? ''}: ${notification.body ?? ''}',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       title: 'TuturEdu',
       theme: ThemeData(
         useMaterial3: true,
@@ -39,12 +71,17 @@ class MyApp extends StatelessWidget {
           elevation: 0,
           color: Colors.white,
           surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -62,17 +99,23 @@ class MyApp extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             elevation: 1,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
         listTileTheme: ListTileThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       home: const WelcomeScreen(),
