@@ -30,10 +30,16 @@ class WelcomeScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Logo
+                // Logo. Uses the trimmed wordmark (tuturedu_logo.png has a
+                // lot of blank canvas padding baked in - see
+                // tuturedu_logo_trimmed.png, which crops to the tight
+                // content bbox only) so it renders at a readable size in
+                // this narrow column instead of shrinking to fit the
+                // original banner's ~9.6:1 aspect ratio.
                 Image.asset(
-                  'assets/images/tuturedu_logo.png',
-                  height: 90,
+                  'assets/images/tuturedu_logo_trimmed.png',
+                  width: double.infinity,
+                  height: 130,
                   fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 36),

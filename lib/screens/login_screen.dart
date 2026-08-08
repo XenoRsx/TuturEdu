@@ -230,12 +230,16 @@ class _LoginScreenState extends State<LoginScreen> {
           borderRadius: BorderRadius.circular(18),
           child: Image.asset(
             'assets/images/arena_matrix_logo.png',
-            height: 84,
-            width: 84,
-            fit: BoxFit.cover,
+            // Source is 874x714 (~1.22:1), not square - BoxFit.cover was
+            // cropping the shield's left/right points to force it into a
+            // square box. BoxFit.contain + a box matching that aspect
+            // ratio shows the whole logo uncropped.
+            height: 130,
+            width: 159,
+            fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) => Container(
-              height: 84,
-              width: 84,
+              height: 130,
+              width: 159,
               decoration: BoxDecoration(
                 color: kBrandBlue.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(18),
