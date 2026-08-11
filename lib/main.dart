@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
@@ -9,6 +11,18 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Required to initialize Firebase when the app starts
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Web only: don't persist the session across page loads - a shared/public
+  // browser shouldn't stay signed in the way a personal phone does (see
+  // AuthGate, which auto-routes past login on mobile/desktop using whatever
+  // Firebase Auth persisted). Default web persistence is LOCAL (survives
+  // closing the tab/browser); NONE clears it as soon as the page reloads,
+  // so the web build always lands back on WelcomeScreen needing a fresh
+  // sign-in. Native platforms ignore setPersistence (no-op there).
+  if (kIsWeb) {
+    await FirebaseAuth.instance.setPersistence(Persistence.NONE);
+  }
+
   runApp(const MyApp());
 }
 

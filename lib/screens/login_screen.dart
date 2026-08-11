@@ -219,7 +219,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Short blurb about Pusat Tuisyen Arena Matrix, the tuition centre this
+  // Short blurb about Pusat Tuisyen Arena Matriks, the tuition centre this
   // TuturEdu platform serves. Logo loads from
   // assets/images/arena_matrix_logo.png - falls back to a placeholder icon
   // if that file hasn't been added yet (avoids a crash).
@@ -250,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 14),
         const Text(
-          'Pusat Tuisyen Arena Matrix',
+          'Pusat Tuisyen Arena Matriks',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -260,7 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 6),
         const Text(
           'TuturEdu is the official chat platform for Pusat Tuisyen Arena '
-          'Matrix, connecting students, parents & tutors in one safe '
+          'Matriks, connecting students, parents & tutors in one safe '
           'conversation space, in line with the tuition centre\'s operating '
           'hours.',
           textAlign: TextAlign.center,

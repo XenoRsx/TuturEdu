@@ -220,6 +220,15 @@ User buka app
 > WelcomeScreen. Kalau Firestore user doc dah takde/corrupt (akaun
 > dipadam), AuthGate sign-out session yang "mati" tu dan jatuh balik ke
 > WelcomeScreen, bukan skrin kosong.
+>
+> **Web tak ikut sekali** — sengaja. `main.dart` set
+> `FirebaseAuth.instance.setPersistence(Persistence.NONE)` untuk `kIsWeb`
+> sahaja sebelum `runApp()`, so build Web sentiasa minta sign-in semula
+> setiap kali page di-reload/browser dibuka semula (default Firebase Web
+> persistence tu LOCAL, sama macam mobile — override ni sebab browser
+> selalunya shared/public device, tak sesuai auto-stay-signed-in macam
+> telefon peribadi). Native (Android/iOS) tak terjejas - `setPersistence`
+> no-op di situ, session tetap persist macam biasa.
 
 ### 5.1a Aliran Register (Sign Up) — ✅ Sudah dilaksanakan
 
@@ -938,7 +947,7 @@ android/app/src/main/res/               // ✅ ikon launcher ditukar (rujuk 4.1)
     └── option3_double_tap.mp3
 ```
 
-> **Nota bahasa UI:** Semua skrin (`lib/screens/`, `lib/utils/`, `lib/models/`) kini menggunakan Bahasa Inggeris sepenuhnya, termasuk code comments. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matrix") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
+> **Nota bahasa UI:** Semua skrin (`lib/screens/`, `lib/utils/`, `lib/models/`) kini menggunakan Bahasa Inggeris sepenuhnya, termasuk code comments. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matriks") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
 
 ---
 
