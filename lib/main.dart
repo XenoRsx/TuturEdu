@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
-import 'screens/welcome_screen.dart';
+import 'screens/auth_gate.dart';
 import 'utils/notification_sounds.dart';
 
 void main() async {
@@ -123,7 +123,7 @@ class _MyAppState extends State<MyApp> {
           ),
         ),
       ),
-      home: const WelcomeScreen(),
+      home: const AuthGate(),
       debugShowCheckedModeBanner: false,
     );
   }

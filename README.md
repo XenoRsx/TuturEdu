@@ -13,6 +13,7 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - Welcome Screen — landing page with TuturEdu branding and options to log in or sign up
 - Sign Up (Self Registration) — users can create their own account; Firebase Authentication and Firestore profile are created together
 - Login & Role-based Access — the system identifies user roles (Student / Teacher / Parent / Admin) after login and routes them to their respective dashboards
+- Session Persistence — an `AuthGate` root widget checks for an existing Firebase Auth session on app start and routes straight to the matching dashboard, so users aren't asked to log in again on every app open
 - Real-time Chat — conversations update live using Cloud Firestore, with read receipts (sent/read ticks) and per-chat unread badges
 - Quick Reply Chips — one-tap common replies ("OK", "Yes", "No", "Thank you", "Noted", "Please wait") above the input bar
 - Group Chat — teachers create a group chat per subject/class (pick enrolled students via checkbox), with a Group Info screen for the admin to add/remove members and other members to leave
@@ -45,11 +46,12 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 
 ```
 lib/
-├── main.dart                         # App entry point (loads WelcomeScreen), shared theme
+├── main.dart                         # App entry point (loads AuthGate), shared theme
 ├── firebase_options.dart             # Firebase configuration (auto-generated)
 ├── models/
 │   └── user_model.dart               # User data model
 ├── screens/
+│   ├── auth_gate.dart                # Root widget - routes to dashboard if a session exists, else WelcomeScreen
 │   ├── welcome_screen.dart           # Landing screen (Log In / Sign Up)
 │   ├── register_screen.dart          # Self sign-up screen
 │   ├── login_screen.dart             # Login screen
@@ -247,6 +249,7 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Welcome screen
 - [x] Sign up (self registration)
 - [x] Login & role-based routing
+- [x] Session persistence (AuthGate) — no repeated login on app restart
 - [x] Firebase Authentication + Firestore integration
 - [x] Real-time chat with read receipts & unread badges
 - [x] Quick reply chips

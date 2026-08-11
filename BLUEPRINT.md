@@ -196,7 +196,12 @@ Tiada item buat masa ni — Push Notification (dulu satu-satunya item di sini) d
 
 ```
 User buka app
-   → WelcomeScreen (branding TuturEdu, pilihan "Log In" / "Sign Up")
+   → AuthGate (root widget, lib/screens/auth_gate.dart)   // ✅ ditambah
+        - StreamBuilder atas FirebaseAuth.authStateChanges()
+        - Ada session sah (currentUser != null)?
+             YA  → ambil role dari Firestore (users/{uid}), route terus ke
+                   dashboard yang sepadan (tiada perlu login semula)
+             TIDAK → WelcomeScreen (branding TuturEdu, pilihan "Log In" / "Sign Up")
    → Tekan "Log In" → LoginScreen
    → Masukkan email & password
    → FirebaseAuth.signInWithEmailAndPassword()
@@ -207,6 +212,14 @@ User buka app
         - "Parent"   → ParentDashboard (skrin placeholder, chat module belum dibina)
         - "Admin"    → AdminDashboard   // ✅ ditambah
 ```
+
+> **Nota:** Firebase Auth sendiri dah auto-persist session merentasi app restart —
+> bug asal adalah `main.dart`'s `home:` di-hardcode ke `WelcomeScreen`, jadi
+> app minta login semula setiap kali dibuka walaupun session masih sah.
+> `AuthGate` fix ni dengan check `currentUser` dulu sebelum papar
+> WelcomeScreen. Kalau Firestore user doc dah takde/corrupt (akaun
+> dipadam), AuthGate sign-out session yang "mati" tu dan jatuh balik ke
+> WelcomeScreen, bukan skrin kosong.
 
 ### 5.1a Aliran Register (Sign Up) — ✅ Sudah dilaksanakan
 
@@ -851,13 +864,14 @@ Had skop (Web Push):
 
 ```
 lib/
-├── main.dart                            // home: WelcomeScreen; ThemeData/design system dikongsi
+├── main.dart                            // home: AuthGate; ThemeData/design system dikongsi
 ├── firebase_options.dart
 ├── models/
 │   ├── user_model.dart
 │   └── message_model.dart          (cadangan — belum wujud)
 ├── screens/
-│   ├── welcome_screen.dart              // ✅ entry point app, EN
+│   ├── auth_gate.dart                   // ✅ root widget - check session sedia ada (rujuk 5.1) sebelum papar welcome_screen.dart
+│   ├── welcome_screen.dart              // ✅ entry point tanpa session, EN
 │   ├── register_screen.dart             // ✅ sign up, EN
 │   ├── login_screen.dart
 │   ├── student_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
@@ -1136,6 +1150,7 @@ match /quizAttempts/{attemptId} {
 - [x] Welcome / Landing screen (EN)
 - [x] Register screen (Sign Up, EN) — auto-create Firebase Auth + Firestore profile
 - [x] Login & role-based routing
+- [x] Session persistence (AuthGate, rujuk Seksyen 5.1) — app tak minta login semula bila dibuka semula dengan session sah
 - [x] Firebase Authentication + Firestore integration
 - [x] Real-time chat antara student & teacher
 - [x] Office hour lock logic (global)
