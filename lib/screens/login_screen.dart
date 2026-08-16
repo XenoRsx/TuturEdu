@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
 import '../utils/push_notifications.dart';
+import 'about_arena_matriks_screen.dart';
 import 'teacher_dashboard.dart';
 import 'student_dashboard.dart';
 import 'parent_dashboard.dart';
@@ -265,6 +266,30 @@ class _LoginScreenState extends State<LoginScreen> {
           'hours.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12.5, color: kInkMuted, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AboutArenaMatriksScreen(),
+              ),
+            );
+          },
+          child: const Text(
+            'Learn more about us',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: kBrandBlue,
+            ),
+          ),
         ),
       ],
     );

@@ -4,6 +4,7 @@
 // Log In or Sign Up.
 
 import 'package:flutter/material.dart';
+import 'about_arena_matriks_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 
@@ -79,14 +80,19 @@ class WelcomeScreen extends StatelessWidget {
                       backgroundColor: const Color(0xFF2E86C1),
                       foregroundColor: Colors.white,
                       elevation: 2,
-                      shadowColor: const Color(0xFF2E86C1).withValues(alpha: 0.4),
+                      shadowColor: const Color(
+                        0xFF2E86C1,
+                      ).withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                     child: const Text(
                       'Log In',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -99,12 +105,17 @@ class WelcomeScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       );
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF1B8E5A),
-                      side: const BorderSide(color: Color(0xFF1B8E5A), width: 1.5),
+                      side: const BorderSide(
+                        color: Color(0xFF1B8E5A),
+                        width: 1.5,
+                      ),
                       backgroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -112,11 +123,35 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                     child: const Text(
                       'Sign Up',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 16),
+
+                // About Pusat Tuisyen Arena Matriks
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AboutArenaMatriksScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'About Pusat Tuisyen Arena Matriks',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF6B7A8F),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

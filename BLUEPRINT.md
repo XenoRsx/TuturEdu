@@ -881,6 +881,7 @@ lib/
 ├── screens/
 │   ├── auth_gate.dart                   // ✅ root widget - check session sedia ada (rujuk 5.1) sebelum papar welcome_screen.dart
 │   ├── welcome_screen.dart              // ✅ entry point tanpa session, EN
+│   ├── about_arena_matriks_screen.dart  // ✅ page statik "Tentang Kami" - boleh diakses dari WelcomeScreen & LoginScreen (pra-login), tiada Firestore/Auth
 │   ├── register_screen.dart             // ✅ sign up, EN
 │   ├── login_screen.dart
 │   ├── student_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
@@ -1026,14 +1027,17 @@ chats/
 match /chats/{chatId}/attachments/{fileName} {
   allow read: if request.auth != null &&
                request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
-  allow write: if request.auth != null &&
-                request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+  allow write: if request.auth != null;
 }
 ```
 
 > Nota: Storage Rules boleh sekat berdasarkan saiz & content-type asas, tetapi **tidak boleh** baca magic number fail — pengesahan magic number tetap dilakukan di client (`file_validator.dart`), dengan Cloud Function server-side sebagai cadangan masa depan (rujuk 8.5).
 >
 > **Nota penting (dijumpai semasa testing sebenar):** Rule asal ada juga semakan `request.resource.size < 10 * 1024 * 1024`, tapi ini disahkan **rosakkan semua write request** dari Flutter Web app (kemungkinan besar sebab bagaimana resumable upload protocol Firebase Storage hantar metadata saiz — `request.resource.size` tak reliable pada peringkat Rules dinilai). Diuji secara empirikal: buang semakan saiz tu → upload terus berfungsi. Oleh itu had 10MB **hanya** dikuatkuasakan client-side (`file_validator.dart`), bukan dalam Storage Rules — cukup memadai untuk app sebenar (user tak boleh bypass client), walaupun secara teori seseorang yang panggil Storage API terus (bukan melalui app) boleh upload fail lebih besar. Trade-off yang diterima untuk skop projek ni.
+>
+> **Nota kedua (dijumpai 2026-08-16, bug sebenar dilaporkan Teacher tak boleh upload):** `allow write` yang asal turut ada semakan `firestore.get(...).data.participants` yang sama macam `allow read`. Disahkan melalui diagnostic test (buang firestore.get(), test upload, letak balik) bahawa semakan ni gagal **setiap kali** untuk write request dari Flutter Web — kategori masalah yang sama macam `request.resource.size` di atas: resumable-upload protocol Firebase Storage untuk Web menilai rule masa request session-start, dan cross-service read (`firestore.get()`) tak resolve dengan reliable pada peringkat tu. `allow read` biasa (GET request tunggal, bukan resumable) tak terjejas — kekal ketat ikut participants.
+>
+> `allow write` sekarang dilonggarkan ke `request.auth != null` sahaja (mana-mana user yang dah login). Mitigation: fail yang di-upload oleh bukan-participant tak boleh muncul sebagai mesej sebenar kepada sesiapa, sebab `firestore.rules`'s `messages/{messageId}` create rule (write Firestore biasa, tak terjejas oleh bug Storage ni) tetap wajibkan `senderId == request.auth.uid` DAN sender kena dalam `participants` chat tu. Jadi paling teruk, seseorang boleh "buang" fail dalam Storage folder chat orang lain tanpa sesiapa nampak — bukan kebocoran data yang boleh dibaca, cuma potensi storage litter. Trade-off diterima untuk skop FYP ni.
 
 ### 8.9 UI Bubble Attachment dalam Chat
 
@@ -1159,7 +1163,8 @@ match /quizAttempts/{attemptId} {
 - [x] Welcome / Landing screen (EN)
 - [x] Register screen (Sign Up, EN) — auto-create Firebase Auth + Firestore profile
 - [x] Login & role-based routing
-- [x] Session persistence (AuthGate, rujuk Seksyen 5.1) — app tak minta login semula bila dibuka semula dengan session sah
+- [x] Session persistence (AuthGate, rujuk Seksyen 5.1) — app tak minta login semula bila dibuka semula dengan session sah (Web sengaja dikecualikan — rujuk nota dalam 5.1)
+- [x] About page (Pusat Tuisyen Arena Matriks) — diakses dari WelcomeScreen & LoginScreen sebelum log in
 - [x] Firebase Authentication + Firestore integration
 - [x] Real-time chat antara student & teacher
 - [x] Office hour lock logic (global)

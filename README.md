@@ -11,6 +11,7 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 ## Features
 
 - Welcome Screen — landing page with TuturEdu branding and options to log in or sign up
+- About Page — static "About Pusat Tuisyen Arena Matriks" page, reachable pre-login from both the Welcome and Login screens (no Firestore/Auth dependency)
 - Sign Up (Self Registration) — users can create their own account; Firebase Authentication and Firestore profile are created together
 - Login & Role-based Access — the system identifies user roles (Student / Teacher / Parent / Admin) after login and routes them to their respective dashboards
 - Session Persistence — an `AuthGate` root widget checks for an existing Firebase Auth session on app start and routes straight to the matching dashboard, so users aren't asked to log in again on every app open
@@ -53,6 +54,7 @@ lib/
 ├── screens/
 │   ├── auth_gate.dart                # Root widget - routes to dashboard if a session exists, else WelcomeScreen
 │   ├── welcome_screen.dart           # Landing screen (Log In / Sign Up)
+│   ├── about_arena_matriks_screen.dart # Static "About" page, reachable pre-login
 │   ├── register_screen.dart          # Self sign-up screen
 │   ├── login_screen.dart             # Login screen
 │   ├── student_dashboard.dart        # = ChatListScreen configured for Student
@@ -249,7 +251,8 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Welcome screen
 - [x] Sign up (self registration)
 - [x] Login & role-based routing
-- [x] Session persistence (AuthGate) — no repeated login on app restart
+- [x] Session persistence (AuthGate) — no repeated login on app restart (Web excluded on purpose)
+- [x] About page (Pusat Tuisyen Arena Matriks) — reachable pre-login
 - [x] Firebase Authentication + Firestore integration
 - [x] Real-time chat with read receipts & unread badges
 - [x] Quick reply chips
