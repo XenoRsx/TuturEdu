@@ -36,6 +36,7 @@
 //     lastRead timestamp is at or after the message's timestamp.
 
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -44,6 +45,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../utils/file_validator.dart';
 import '../utils/office_hours.dart';
+import '../utils/phishing_detector.dart';
 import 'full_image_screen.dart';
 import 'group_info_screen.dart';
 import 'user_profile_screen.dart';
@@ -499,6 +501,121 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // ----- URL phishing detection (heuristic, client-side - see
+  // lib/utils/phishing_detector.dart and BLUEPRINT.md section 11) -----
+
+  /// Renders message [text] as plain text with any detected URLs turned
+  /// into tappable spans - blue/underlined if [isSuspiciousUrl] finds
+  /// nothing unusual, red with a warning icon (and a confirm-before-open
+  /// dialog) if it does.
+  Widget _buildMessageText(String text, bool isMe) {
+    final baseColor = isMe ? Colors.white : Colors.black87;
+    final matches = urlPattern.allMatches(text).toList();
+
+    if (matches.isEmpty) {
+      return Text(text, style: TextStyle(color: baseColor));
+    }
+
+    final spans = <InlineSpan>[];
+    int cursor = 0;
+    for (final match in matches) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, match.start)));
+      }
+
+      final rawUrl = match.group(0)!;
+      final suspicious = isSuspiciousUrl(rawUrl);
+
+      if (suspicious) {
+        spans.add(
+          const WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: EdgeInsets.only(right: 2),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: 14,
+                color: Colors.redAccent,
+              ),
+            ),
+          ),
+        );
+      }
+
+      spans.add(
+        TextSpan(
+          text: rawUrl,
+          style: TextStyle(
+            color: suspicious
+                ? Colors.redAccent
+                : (isMe ? Colors.lightBlueAccent.shade100 : Colors.blue),
+            decoration: TextDecoration.underline,
+            fontWeight: suspicious ? FontWeight.bold : FontWeight.normal,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => suspicious
+                ? _confirmSuspiciousLink(rawUrl)
+                : _launchChatLink(rawUrl),
+        ),
+      );
+
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      spans.add(TextSpan(text: text.substring(cursor)));
+    }
+
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(color: baseColor),
+        children: spans,
+      ),
+    );
+  }
+
+  Future<void> _launchChatLink(String rawUrl) async {
+    final uri = Uri.tryParse(normalizeUrl(rawUrl));
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showAttachmentError('Could not open the link.');
+    }
+  }
+
+  Future<void> _confirmSuspiciousLink(String rawUrl) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Suspicious link'),
+          ],
+        ),
+        content: Text(
+          'This link looks like it could be a phishing attempt:\n\n$rawUrl\n\n'
+          'Only open it if you trust where it came from.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'Open Anyway',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) await _launchChatLink(rawUrl);
+  }
+
   // ----- Overtime Mode: "Reply Now (Overtime Mode)" -----
   void _activateOvertimeReplyNow() {
     setState(() => _overtimeActive = true);
@@ -922,12 +1039,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 isMe,
                               )
                             else
-                              Text(
-                                text,
-                                style: TextStyle(
-                                  color: isMe ? Colors.white : Colors.black87,
-                                ),
-                              ),
+                              _buildMessageText(text, isMe),
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Row(

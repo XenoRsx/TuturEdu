@@ -10,6 +10,31 @@ was committed.
 
 ### Added
 
+- **Full Admin account deletion** — "Delete User" in Manage Users now calls
+  a new `deleteUserAccount` callable Cloud Function (`functions/index.js`,
+  `asia-southeast1`) that removes both the Firestore profile and the
+  Firebase Authentication account in one call. Previously only the
+  Firestore document was removed (the login account stayed active) since
+  the client SDK can only ever delete the *currently signed-in* user's own
+  Auth account — deleting someone else's needs the Admin SDK, hence the
+  Cloud Function. The function re-verifies caller-is-Admin server-side
+  before doing anything, never trusting the client alone.
+- **URL Phishing Detection** (`lib/utils/phishing_detector.dart`) — chat
+  messages are scanned for URLs and flagged if they match common phishing
+  patterns: raw IP-literal hosts, the `@` URL trick, known link shorteners,
+  punycode/IDN domains, and a short list of commonly-abused TLDs.
+  Heuristic-only, client-side, no external API. This also introduces
+  tappable links in chat text for the first time — previously message text
+  was always static, only file-attachment links were tappable. Safe links
+  open directly; flagged ones show a warning icon and require confirming
+  an "Open Anyway" dialog first. Speced in BLUEPRINT.md section 11.
+
+---
+
+## 2026-08-16 — About page & Web file upload fix
+
+### Added
+
 - **About page** (`about_arena_matriks_screen.dart`) — a static "About Pusat
   Tuisyen Arena Matriks" page reachable before login from both the Welcome
   and Login screens. Gradient hero header with the centre's logo, a mission

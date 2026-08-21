@@ -2,15 +2,19 @@
 //
 // Admin screen: list of all users in the system. Admin can:
 // - Change a user's role (e.g. accidentally registered as Student, change to Teacher)
-// - Delete an account (removes it from the Firestore users collection)
+// - Delete an account (Firebase Authentication + Firestore profile, both)
 //
-// Note: Delete here only removes the Firestore document, NOT the Firebase
-// Authentication account (that needs Admin SDK/Cloud Function - see the note
-// in _deleteUser). For MVP purposes, this is enough to effectively
-// "deactivate" a user (they can no longer log in with a valid role).
+// Full deletion (not just the Firestore doc) goes through the
+// deleteUserAccount Cloud Function (functions/index.js) - the client SDK can
+// only ever delete the CURRENTLY signed-in user's own Auth account (see
+// settings_screen.dart's self-service delete), there's no client-side way to
+// remove someone else's. The function re-checks caller-is-Admin server-side
+// before doing anything, same as every other Admin-only write already
+// covered by firestore.rules' isAdmin() helper.
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'link_parent_child_screen.dart';
 
 class ManageUsersScreen extends StatefulWidget {
@@ -207,9 +211,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Delete User'),
         content: Text(
-          'Remove "$name" from the system? This deletes their profile data. '
-          '(Their login account is not deleted automatically - remove it '
-          'separately from Firebase Authentication console if needed.)',
+          'Permanently delete "$name"? This removes both their profile '
+          'data and login account. This cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -225,8 +228,17 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
       ),
     );
 
-    if (confirmed == true) {
-      await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+    if (confirmed != true) return;
+
+    try {
+      await FirebaseFunctions.instanceFor(
+        region: 'asia-southeast1',
+      ).httpsCallable('deleteUserAccount').call({'uid': uid});
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete "$name": ${e.message}')),
+      );
     }
   }
 

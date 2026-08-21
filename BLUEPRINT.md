@@ -153,7 +153,7 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Office Hour Lock (Global)** — chat automatik dikunci di luar waktu pejabat (Isnin–Jumaat, 9AM–5PM), guna semakan `DateTime.now()` pada client
 - **Overtime Mode & Schedule Message** — bila chat locked, Teacher diberi pilihan "Reply Now (Overtime Mode)" atau "Schedule Reply"; Student/Parent diberi "Schedule Message" (mekanisme sama, cuma tiada bypass "Reply Now" — rujuk 5.4)
 - **Admin Dashboard** — hub khas untuk role Admin: quick stats (jumlah Student/Teacher/Parent), navigasi ke Manage Users & Manage Subjects
-- **Manage Users (Admin)** — Admin boleh search/filter user ikut role, tukar role user (contoh Student → Teacher), padam user (buang dokumen Firestore; akaun Firebase Authentication kekal — nota dipapar dalam UI, rujuk 4.2/limitation), dan "Edit Subjects" (assign entri dari `subjectCatalog` ke Teacher/Student individu)
+- **Manage Users (Admin)** — Admin boleh search/filter user ikut role, tukar role user (contoh Student → Teacher), padam user sepenuhnya — dokumen Firestore DAN akaun Firebase Authentication, melalui Cloud Function `deleteUserAccount` (rujuk 5.7) — dan "Edit Subjects" (assign entri dari `subjectCatalog` ke Teacher/Student individu)
 - **Manage Subjects (Admin) (✅ CRUD penuh)** — Admin boleh Add/Edit/Delete entri `subjectCatalog`. **Add** guna dropdown (bukan free-text) untuk Subject & Level — senarai subjek biasa (Bahasa Malaysia, English, Add Maths, dll.) & level (Year 1-6, Form 1-5, Lower/Upper Six), dengan pilihan "Other (type manually)" yang papar text field custom kalau subjek/level tak ada dalam senarai. Ini + duplicate-name check (case-sensitive exact match sebelum create) elak inconsistency macam "Add Maths" vs "add maths". **Edit** (rename, masih free-text sebab nama gabungan susah nak split balik ke Subject+Level) papar amaran berapa ramai profile (`users.subjects arrayContains`) yang sedang guna nama tu sebelum simpan — sebab `users.subjects` simpan nama sebagai plain string (bukan reference ke dokumen catalog), rename di sini TIDAK auto-update profile yang dah assign. **Delete** papar amaran usage count yang sama sebelum confirm. Ada search field untuk tapis senarai.
 - **Firestore Security Rules** — setiap chat & scheduledReplies hanya boleh diakses oleh participant/pemilik yang terlibat; `users` & `subjectCatalog` ada permission khas untuk Admin (fungsi `isAdmin()`)
 - **Group Chat** — Teacher cipta group chat ikut subjek (`create_group_chat_screen.dart`): pilih subjek yang diajar, pilih student yang enrolled dalam subjek tu (checkbox + Select All), masukkan nama group. `chat_screen.dart` papar nama group dalam AppBar & nama pengirim di atas setiap mesej masuk (mod group); `chat_list_screen.dart` papar group chat dengan ikon & nama group berasingan daripada chat 1:1. **Nota:** group TIDAK auto-update bila student baru enrol subjek yang sama selepas group dicipta — perlu Teacher cipta group baru.
@@ -182,7 +182,6 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 Berdasarkan prototype Figma, ciri-ciri berikut telah direka tetapi belum dilaksanakan dalam kod:
 
 - **Working Hours Custom Per-Teacher** — setiap teacher set jadual JAM harian sendiri (contoh 10AM-6PM, bukan 9AM-5PM global untuk semua), sebagai penambahbaikan masa depan. **Beza dengan Leave/Holiday (✅ dah dibina, rujuk 5.14)**: Leave/Holiday ialah julat TARIKH auto Off-Duty, bukan jadual jam harian custom.
-- **Admin: Full Account Deletion** — "Delete User" dalam Manage Users semasa hanya buang dokumen Firestore; padam akaun **Firebase Authentication** sepenuhnya perlukan Admin SDK/Cloud Function (client-side Flutter tak boleh padam akaun Auth user lain secara terus, atas sebab keselamatan Firebase). **Belum dibina** — perlukan infra Cloud Functions berasingan (Node.js project, deploy pipeline lain), keputusan sengaja ditangguh buat masa ni (rujuk perbualan sesi ni - dianggap infra risk/effort berasingan dari kerja Flutter/Firestore rules yang lain).
 
 ### 4.3 Status: Belum Dirancang / Cadangan Masa Depan 💡
 
@@ -463,9 +462,15 @@ Admin login → AdminDashboard
         - StreamBuilder senarai semua dokumen users
         - Search by nama, filter by role (chip)
         - "Change Role": dialog dropdown, update users/{uid}.role
-        - "Delete User": confirmation dialog, delete dokumen users/{uid}
-             (NOTA: ini hanya buang dokumen Firestore, BUKAN akaun Firebase
-             Authentication — rujuk limitation dalam Seksyen 4.2)
+        - "Delete User": confirmation dialog, panggil Cloud Function
+             `deleteUserAccount` (functions/index.js) — padam DUA-DUA
+             dokumen Firestore users/{uid} DAN akaun Firebase Authentication
+             sekali gus. ✅ Full deletion (bukan lagi Firestore sahaja) —
+             function verify caller ialah Admin (server-side, semak
+             users/{callerUid}.role) sebelum benarkan, sebab client SDK
+             hanya boleh padam akaun Auth DIA SENDIRI (rujuk self-delete di
+             Settings, Seksyen 5.14), tiada cara client padam akaun orang
+             lain tanpa Admin SDK
    → Pilih "Manage Subjects":
         - Form input Subject + Level berasingan → digabung jadi "{Subject} {Level}"
         - Simpan ke subjectCatalog collection (rujuk Seksyen 3.6)
@@ -792,11 +797,13 @@ rujuk juga 5.7):
      currentUser.delete() (akaun Firebase Authentication SENDIRI)
    → pushAndRemoveUntil ke WelcomeScreen
    → Nota skop: Firebase BENARKAN user padam akaun Auth DIA SENDIRI
-     client-side (tiada Admin SDK diperlukan) - ni BEZA sepenuhnya dengan
-     Admin cuba padam akaun ORANG LAIN (perlukan Cloud Function, rujuk 4.2).
+     client-side (tiada Admin SDK diperlukan) - ni BEZA dengan Admin padam
+     akaun ORANG LAIN, yang tetap perlukan Cloud Function `deleteUserAccount`
+     (✅ dibina, rujuk 5.7) sebab client SDK tak boleh padam akaun Auth
+     orang lain atas sebab keselamatan Firebase.
      TIADA cleanup rentas-akaun (contoh: kosongkan childUid pada dokumen
-     Parent kalau Student yang dipadam ada parentUid) - trade-off diterima,
-     sama macam had sedia ada "Admin Delete User tak sentuh Firebase Auth".
+     Parent kalau Student yang dipadam ada parentUid) - trade-off diterima
+     untuk kedua-dua laluan delete (self-service dan Admin).
 ```
 
 ### 5.15 Aliran Notification Sound (✅ Sudah dilaksanakan)
@@ -922,7 +929,8 @@ lib/
     ├── file_validator.dart             // ✅ rujuk Seksyen 8
     ├── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
     ├── push_notifications.dart         // ✅ daftar/buang token FCM, rujuk Seksyen 5.12
-    └── notification_sounds.dart        // ✅ 3 pilihan bunyi + main audio, rujuk Seksyen 5.15
+    ├── notification_sounds.dart        // ✅ 3 pilihan bunyi + main audio, rujuk Seksyen 5.15
+    └── phishing_detector.dart          // ✅ heuristic URL scan (client-side), rujuk Seksyen 11
 
 assets/
 ├── images/
@@ -938,7 +946,7 @@ web/
 
 functions/                              // ✅ projek Node.js BERASINGAN (bukan lib/, bukan Dart/Flutter)
 ├── package.json                        // firebase-admin, firebase-functions v2
-└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter, hantar android.notification.sound ikut keutamaan, rujuk 5.12/5.15
+└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter (rujuk 5.12/5.15) + deleteUserAccount (callable, rujuk 5.7)
 
 android/app/src/main/res/               // ✅ ikon launcher ditukar (rujuk 4.1), + raw/ untuk bunyi Android
 ├── mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png  // ✅ mark TuturEdu, latar putih
@@ -1187,7 +1195,52 @@ match /quizAttempts/{attemptId} {
 - [x] Push notification (FCM, rujuk Seksyen 5.12) — Web VAPID key dah diisi & dideploy, aktif sepenuhnya; Android dapat bunyi custom untuk background push (rujuk 5.15) - iOS tak terjejas tapi belum dibina/diuji
 - [x] Settings Screen — Edit Profile, Change Password, Push toggle, Notification Sound (3 pilihan), Log Out, Delete Account (self-service), Leave/Holiday dates untuk Teacher (rujuk Seksyen 5.14/5.15)
 - [x] Android APK — `flutter build apk --release` disahkan berfungsi, ikon launcher ditukar dari default Flutter (rujuk 4.1). Package name `com.example.tuturedu` & debug signing masih placeholder - cukup untuk sideload/demo, belum sedia untuk publish Play Store
-- [ ] Full Admin account deletion (padam akaun Firebase Authentication, perlukan Cloud Function/Admin SDK — infra Cloud Functions dah wujud sekarang dari kerja push notification, jadi ni jadi lebih senang nak tambah bila-bila; BEZA dengan self-delete akaun sendiri yang dah dibina dalam Settings)
+- [x] Full Admin account deletion (Cloud Function `deleteUserAccount` — padam dokumen Firestore DAN akaun Firebase Authentication sekali gus, rujuk Seksyen 5.7; BEZA dengan self-delete akaun sendiri yang dah dibina dalam Settings, Seksyen 5.14)
+- [x] URL Phishing Detection dalam chat (heuristic client-side, rujuk Seksyen 11)
+
+---
+
+## 11. URL Phishing Detection (✅ Sudah dilaksanakan)
+
+### 11.1 Skop & Motivasi
+
+Chat platform ni dipakai oleh Student, Teacher, dan Parent — termasuk kanak-kanak/remaja yang lebih mudah jadi mangsa phishing link (contoh: "menang hadiah", "akaun disekat, sila log masuk semula"). Ciri ni scan URL dalam **mesej teks** (bukan fail attachment — fail attachment dah disahkan selamat melalui 3-lapisan validation di Seksyen 8) dan beri amaran visual bila URL nampak mencurigakan, sebelum user tekan buka.
+
+**Pendekatan dipilih: heuristic client-side sahaja** (bukan panggil API luar macam Google Safe Browsing) — tiada kebergantungan pada API key/Cloud Function tambahan, tiada latency rangkaian, sesuai dengan skop FYP. Trade-off: kurang tepat berbanding API sebenar (boleh miss phishing link yang licin, atau flag link biasa yang kebetulan match pattern) — diterima sebagai "amaran asas", bukan jaminan 100%.
+
+### 11.2 Nota Penting: Tiada Fungsi Link-dalam-Teks Sebelum Ini
+
+Sebelum ciri ni, mesej teks dalam chat (`chat_screen.dart`) **tidak** menjadikan URL sebagai link boleh tap — `url_launcher` (`_openAttachment()`) hanya dipakai untuk buka fail attachment (Seksyen 8.9), bukan URL yang ditaip dalam teks mesej biasa. Jadi ciri ni bina DUA benda sekali gus (`_buildMessageText()` dalam `chat_screen.dart`, gantikan `Text(text, ...)` yang asal):
+
+1. ✅ Detect URL dalam teks mesej (`urlPattern` regex) dan render sebagai span boleh-tap (`Text.rich`/`TextSpan` + `TapGestureRecognizer`), bukan setakat teks statik macam dulu.
+2. ✅ Klasifikasi setiap URL dijumpai sebagai selamat/mencurigakan (`isSuspiciousUrl()`), dan beza cara render/tindakan ikut klasifikasi tu.
+
+### 11.3 Heuristic (`lib/utils/phishing_detector.dart`)
+
+URL ditanda **mencurigakan** jika mana-mana syarat berikut benar:
+
+- Host adalah alamat IP terus (contoh `http://192.168.1.1/...`) — taktik biasa untuk elak domain-based blocklist
+- Ada aksara `@` dalam URL sebelum host sebenar (contoh `http://legit-site.com@evil.com/`) — trick klasik untuk tipu mata pengguna
+- Host guna known URL shortener (`bit.ly`, `tinyurl.com`, `t.co`, `goo.gl`, `is.gd`, dll — senarai kecil predefined) — destinasi sebenar disembunyikan
+- Host guna Punycode/IDN (`xn--...`) — selalu tanda domain homograph (cth. "gооgle.com" guna huruf Cyrillic)
+- TLD tergolong dalam senarai TLD kerap disalahguna untuk phishing (`.tk`, `.ml`, `.ga`, `.cf`, `.gq`, `.top`, `.click`, `.work` — senarai kecil predefined, boleh extend)
+
+URL yang tak match mana-mana di atas dianggap selamat (default).
+
+### 11.4 Aliran UI (✅ Dilaksanakan)
+
+- Mesej teks yang mengandungi URL: render guna `Text.rich`/`TextSpan` dengan `TapGestureRecognizer` pada bahagian URL sahaja (bukan seluruh mesej) — `_buildMessageText()` dalam `chat_screen.dart`
+- **URL selamat** — warna biru macam link biasa, underline, tap terus buka guna `url_launcher` (`_launchChatLink()`, `LaunchMode.externalApplication`, sama pattern macam `_openAttachment()`)
+- **URL mencurigakan** — warna merah + ikon amaran (⚠️ `Icons.warning_amber_rounded` sebagai `WidgetSpan`) di depan URL tu, tap papar `AlertDialog` amaran (`_confirmSuspiciousLink()`) dengan butang "Cancel" (default) dan "Open Anyway" (merah) sebelum benarkan `url_launcher` jalan
+- Klasifikasi dikira **client-side, masa render** (bukan disimpan dalam Firestore) — kalau senarai heuristic dikemaskini kelak, mesej lama pun automatik dapat klasifikasi terkini, tiada backfill data diperlukan
+- Regex `urlPattern` padan `https?://...` DAN `www....` tanpa scheme (`normalizeUrl()` tambah `https://` bila perlu sebelum `Uri.parse`/`launchUrl`)
+
+### 11.5 Had & Skop Masa Depan
+
+- Heuristic sahaja — tiada semakan reputasi domain sebenar (Google Safe Browsing/VirusTotal) sebab elak kebergantungan API key + Cloud Function untuk skop FYP ni
+- Tak scan URL dalam nama fail attachment atau dalam PDF/dokumen yang dimuat naik — skop terhad kepada teks mesej sahaja
+- Cadangan masa depan (💡, bukan skop semasa): upgrade ke Cloud Function + Google Safe Browsing API kalau nak ketepatan lebih tinggi, ikut pattern `functions/index.js` yang dah wujud
+
 ---
 
 *Dokumen ini adalah rujukan hidup — kemas kini bila ciri baru siap dilaksanakan atau reka bentuk berubah.*

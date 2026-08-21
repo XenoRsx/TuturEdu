@@ -8,14 +8,17 @@
 // lib/utils/push_notifications.dart).
 
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getAuth } = require("firebase-admin/auth");
 
 initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
+const auth = getAuth();
 
 const INVALID_TOKEN_CODES = new Set([
   "messaging/invalid-registration-token",
@@ -113,3 +116,47 @@ exports.onNewWarningLetter = onDocumentCreated(
     );
   }
 );
+
+// Admin-only: permanently deletes ANOTHER user's account (Firebase Auth +
+// Firestore profile). Needs the Admin SDK - the client SDK can only ever
+// delete the CURRENTLY signed-in user's own account (see
+// settings_screen.dart's self-service delete), there's no client-side way
+// to remove someone else's Auth account. Callable, so manage_users_screen.dart
+// invokes it directly (no HTTP endpoint/CORS setup needed). Explicit region
+// to match the rest of this project - onCall has no trigger resource to
+// infer a region from the way the Firestore-triggered functions above do.
+exports.deleteUserAccount = onCall({ region: "asia-southeast1" }, async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const targetUid = request.data?.uid;
+  if (!targetUid || typeof targetUid !== "string") {
+    throw new HttpsError("invalid-argument", "Missing target uid.");
+  }
+
+  if (targetUid === callerUid) {
+    throw new HttpsError("failed-precondition", "Use Settings to delete your own account.");
+  }
+
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  if (callerDoc.data()?.role !== "Admin") {
+    throw new HttpsError("permission-denied", "Only an Admin can delete other users' accounts.");
+  }
+
+  await db.collection("users").doc(targetUid).delete();
+
+  try {
+    await auth.deleteUser(targetUid);
+  } catch (error) {
+    // Already gone from Authentication (e.g. previously removed by hand via
+    // the Console) - the Firestore profile deletion above still succeeded,
+    // so treat this as an acceptable no-op instead of failing the call.
+    if (error.code !== "auth/user-not-found") {
+      throw error;
+    }
+  }
+
+  return { success: true };
+});
