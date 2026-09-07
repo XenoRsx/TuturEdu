@@ -61,12 +61,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     );
   }
 
-  Future<void> _unlinkChild(String parentUid, String childUid) async {
+  Future<void> _unlinkChild(
+    String parentUid,
+    String childUid,
+    String childName,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Unlink Child'),
-        content: const Text('Remove this parent-student link?'),
+        content: Text('Remove the link to $childName?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -86,12 +90,65 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     final batch = FirebaseFirestore.instance.batch();
     batch.update(
       FirebaseFirestore.instance.collection('users').doc(parentUid),
-      {'childUid': FieldValue.delete()},
+      {
+        'childUids': FieldValue.arrayRemove([childUid]),
+      },
     );
     batch.update(FirebaseFirestore.instance.collection('users').doc(childUid), {
       'parentUid': FieldValue.delete(),
     });
     await batch.commit();
+  }
+
+  // Lists every child currently linked to this parent, each with its own
+  // "Unlink" action - a parent can have more than one child (see
+  // link_parent_child_screen.dart), so a single link/unlink toggle isn't
+  // enough once there are 2+.
+  Future<void> _manageChildren(
+    String parentUid,
+    String parentName,
+    List<String> childUids,
+  ) async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text("$parentName's Children"),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: childUids
+                .map(
+                  (childUid) => FutureBuilder<String>(
+                    future: _getChildName(childUid),
+                    builder: (context, snapshot) {
+                      final childName = snapshot.data ?? '...';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(childName),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.link_off, color: Colors.red),
+                          tooltip: 'Unlink',
+                          onPressed: () async {
+                            Navigator.pop(dialogContext);
+                            await _unlinkChild(parentUid, childUid, childName);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _changeRole(String uid, String currentRole) async {
@@ -349,21 +406,23 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     final email = data['email'] ?? '';
                     final role = data['role'] ?? 'Student';
                     final subjects = List<String>.from(data['subjects'] ?? []);
-                    final childUid = data['childUid'] as String?;
+                    final childUids = List<String>.from(
+                      data['childUids'] ?? [],
+                    );
 
                     Widget subtitle;
                     if ((role == 'Teacher' || role == 'Student') &&
                         subjects.isNotEmpty) {
                       subtitle = Text('$email\n${subjects.join(', ')}');
-                    } else if (role == 'Parent' && childUid != null) {
-                      subtitle = FutureBuilder<String>(
-                        future: _getChildName(childUid),
+                    } else if (role == 'Parent' && childUids.isNotEmpty) {
+                      subtitle = FutureBuilder<List<String>>(
+                        future: Future.wait(childUids.map(_getChildName)),
                         builder: (context, snapshot) {
-                          final childName = snapshot.data;
+                          final childNames = snapshot.data;
                           return Text(
-                            childName == null
+                            childNames == null
                                 ? email
-                                : '$email\nLinked to: $childName',
+                                : '$email\nLinked to: ${childNames.join(', ')}',
                           );
                         },
                       );
@@ -425,8 +484,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                   _editSubjects(doc.id, subjects);
                                 }
                                 if (value == 'link') _linkChild(doc.id, name);
-                                if (value == 'unlink' && childUid != null) {
-                                  _unlinkChild(doc.id, childUid);
+                                if (value == 'manage_children') {
+                                  _manageChildren(doc.id, name, childUids);
                                 }
                                 if (value == 'delete') {
                                   _deleteUser(doc.id, name);
@@ -444,12 +503,17 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                   ),
                                 if (role == 'Parent')
                                   PopupMenuItem(
-                                    value: childUid == null ? 'link' : 'unlink',
+                                    value: 'link',
                                     child: Text(
-                                      childUid == null
+                                      childUids.isEmpty
                                           ? 'Link Child'
-                                          : 'Unlink Child',
+                                          : 'Link Another Child',
                                     ),
+                                  ),
+                                if (role == 'Parent' && childUids.isNotEmpty)
+                                  const PopupMenuItem(
+                                    value: 'manage_children',
+                                    child: Text('Manage Children'),
                                   ),
                                 const PopupMenuItem(
                                   value: 'delete',

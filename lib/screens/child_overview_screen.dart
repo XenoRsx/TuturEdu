@@ -1,11 +1,13 @@
 // lib/screens/child_overview_screen.dart
 //
-// Parent screen: read-only view of the linked child's attendance and
+// Parent screen: read-only view of a linked child's attendance and
 // performance (see BLUEPRINT.md 5.9). Mirrors the calculations in
 // attendance_overview_screen.dart (student-facing) and
-// class_performance_screen.dart (teacher-facing) but scoped to the
-// parent's linked child (users/{myUid}.childUid) instead of the current
-// user, with no editing/warning-letter actions - viewing only.
+// class_performance_screen.dart (teacher-facing) but scoped to one of the
+// parent's linked children (users/{myUid}.childUids - a parent can have
+// more than one) instead of the current user, with no editing/warning-
+// letter actions - viewing only. A dropdown in the AppBar lets the parent
+// switch which child they're looking at when there's more than one.
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -23,20 +25,34 @@ class ChildOverviewScreen extends StatefulWidget {
   State<ChildOverviewScreen> createState() => _ChildOverviewScreenState();
 }
 
+class _ChildInfo {
+  final String uid;
+  final String name;
+  final List<String> subjects;
+
+  const _ChildInfo({
+    required this.uid,
+    required this.name,
+    required this.subjects,
+  });
+}
+
 class _ChildOverviewScreenState extends State<ChildOverviewScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
   bool _loading = true;
-  String? _childUid;
-  String _childName = '';
-  List<String> _childSubjects = [];
+  List<_ChildInfo> _children = [];
+  int _selectedIndex = 0;
+
+  _ChildInfo? get _selectedChild =>
+      _children.isEmpty ? null : _children[_selectedIndex];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadChild();
+    _loadChildren();
   }
 
   @override
@@ -45,7 +61,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
     super.dispose();
   }
 
-  Future<void> _loadChild() async {
+  Future<void> _loadChildren() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
@@ -53,23 +69,31 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
         .collection('users')
         .doc(currentUser.uid)
         .get();
-    final childUid = myDoc.data()?['childUid'] as String?;
+    final childUids = List<String>.from(myDoc.data()?['childUids'] ?? []);
 
-    if (childUid == null) {
+    if (childUids.isEmpty) {
       if (mounted) setState(() => _loading = false);
       return;
     }
 
-    final childDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(childUid)
-        .get();
+    final childDocs = await Future.wait(
+      childUids.map(
+        (uid) => FirebaseFirestore.instance.collection('users').doc(uid).get(),
+      ),
+    );
 
     if (mounted) {
       setState(() {
-        _childUid = childUid;
-        _childName = childDoc.data()?['name'] ?? 'Student';
-        _childSubjects = List<String>.from(childDoc.data()?['subjects'] ?? []);
+        _children = childDocs
+            .map(
+              (doc) => _ChildInfo(
+                uid: doc.id,
+                name: doc.data()?['name'] ?? 'Student',
+                subjects: List<String>.from(doc.data()?['subjects'] ?? []),
+              ),
+            )
+            .toList();
+        _selectedIndex = 0;
         _loading = false;
       });
     }
@@ -113,13 +137,46 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
   }
 
+  void _onChildChanged(int? index) {
+    if (index == null) return;
+    setState(() => _selectedIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final selected = _selectedChild;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_loading ? 'My Child' : _childName),
+        title: Text(_loading ? 'My Child' : (selected?.name ?? 'My Child')),
         backgroundColor: Colors.orange,
-        bottom: _childUid == null
+        actions: [
+          // Child picker - only shown once there's actually a choice to
+          // make (a parent can have more than one child linked, see
+          // link_parent_child_screen.dart).
+          if (_children.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _selectedIndex,
+                    dropdownColor: Colors.orange.shade600,
+                    iconEnabledColor: Colors.white,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    onChanged: _onChildChanged,
+                    items: [
+                      for (var i = 0; i < _children.length; i++)
+                        DropdownMenuItem(
+                          value: i,
+                          child: Text(_children[i].name),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+        bottom: selected == null
             ? null
             : TabBar(
                 controller: _tabController,
@@ -134,7 +191,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _childUid == null
+          : selected == null
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -157,10 +214,14 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
               ),
             )
           : TabBarView(
+              // Keyed by uid so switching child rebuilds these tabs fresh
+              // (the StreamBuilders/FutureBuilders inside would otherwise
+              // keep showing the previous child's data momentarily).
+              key: ValueKey(selected.uid),
               controller: _tabController,
               children: [
-                _buildAttendanceTab(_childUid!),
-                _buildPerformanceTab(_childUid!),
+                _buildAttendanceTab(selected.uid),
+                _buildPerformanceTab(selected.uid, selected.subjects),
               ],
             ),
     );
@@ -295,8 +356,8 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
     );
   }
 
-  Widget _buildPerformanceTab(String childUid) {
-    if (_childSubjects.isEmpty) {
+  Widget _buildPerformanceTab(String childUid, List<String> childSubjects) {
+    if (childSubjects.isEmpty) {
       return Center(
         child: Text(
           'No subjects enrolled yet.',
@@ -307,7 +368,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
 
     return FutureBuilder<List<DocumentSnapshot>>(
       future: Future.wait(
-        _childSubjects.map(
+        childSubjects.map(
           (subject) => FirebaseFirestore.instance
               .collection('performance')
               .doc(subject)
@@ -325,9 +386,9 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
 
         return ListView.builder(
           padding: const EdgeInsets.all(10),
-          itemCount: _childSubjects.length,
+          itemCount: childSubjects.length,
           itemBuilder: (context, index) {
-            final subject = _childSubjects[index];
+            final subject = childSubjects[index];
             final data = docs[index].data() as Map<String, dynamic>?;
             final percentage = data?['percentage'] as num?;
             final trend = data?['trend'] as String? ?? 'steady';

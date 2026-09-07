@@ -18,7 +18,7 @@
 //   user delete their OWN Auth account client-side with no Admin SDK, unlike
 //   Admin deleting SOMEONE ELSE'S account which still needs a Cloud
 //   Function - see BLUEPRINT.md 4.2. Any other account that links to this
-//   one, e.g. parentUid/childUid, is NOT cleaned up - same accepted
+//   one, e.g. parentUid/childUids, is NOT cleaned up - same accepted
 //   trade-off as Admin's "Delete User" not touching Firebase Auth.)
 
 import 'package:cloud_firestore/cloud_firestore.dart';

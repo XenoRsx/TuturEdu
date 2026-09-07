@@ -44,8 +44,8 @@ users (collection)
         ├── subjects: array<string>               // format "Subjek Tahap", contoh: ["Add Maths Form 4", "Physics Form 5"]
                                                     // Teacher: subjek yang diajar (boleh lebih dari satu)
                                                     // Student: subjek yang diambil (boleh lebih dari satu)
-        ├── parentUid: string                     // ✅ untuk Student, rujuk ke uid Parent - diisi oleh Admin (link_parent_child_screen.dart), rujuk 5.9
-        ├── childUid: string                      // ✅ untuk Parent, rujuk ke uid Student - diisi oleh Admin, kedua-dua field ditulis serentak dalam SATU batch
+        ├── parentUid: string                     // ✅ untuk Student, rujuk ke uid Parent - diisi oleh Admin (link_parent_child_screen.dart), rujuk 5.9. Satu Student = satu Parent sahaja
+        ├── childUids: array<string>              // ✅ untuk Parent, rujuk ke uid Student (boleh LEBIH DARI SATU - arrayUnion setiap kali "Link Child") - diisi oleh Admin, kedua-dua field ditulis serentak dalam SATU batch
         ├── dutyStatus: "on_duty" | "off_duty"    // ✅ untuk Teacher, toggle manual dari AppBar TeacherDashboard - field tiada (belum pernah toggle) = layan sebagai "on_duty", rujuk 5.10
         ├── fcmTokens: array<string>              // ✅ push notification tokens peranti (boleh > 1 - login banyak device/tab), rujuk 5.12
         ├── pushEnabled: boolean                  // ✅ keutamaan Settings - tiada field = layan sebagai true, rujuk 5.14
@@ -76,7 +76,9 @@ chats (collection)
         │           ├── attachmentUrl: string (optional)      // 💡 rujuk Seksyen 8, belum dikod
         │           ├── attachmentType: "pdf" | "image" | "document" (optional)  // 💡 rujuk Seksyen 8, belum dikod
         │           ├── attachmentName: string (optional)     // 💡 rujuk Seksyen 8, belum dikod
-        │           └── isQuickReply: boolean (optional)    // mesej dari quick-reply chip
+        │           ├── isQuickReply: boolean (optional)    // mesej dari quick-reply chip
+        │           ├── deleted: boolean (optional)         // ✅ soft-delete, rujuk Seksyen 5.16
+        │           └── deletedAt: timestamp (optional)     // ✅ rujuk Seksyen 5.16
         └── scheduledReplies (sub-collection)              // ✅ Overtime Mode - "Schedule Reply"
               └── {replyId}
                     ├── senderId: string       // mesti Teacher
@@ -167,7 +169,7 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Quick Reply Chips (✅ dikodkan)** — row chip boleh scroll horizontal ("OK", "Yes", "No", "Thank you", "Noted", "Please wait") di atas input bar dalam `chat_screen.dart`, hanya papar bila chat tak locked. Tekan chip terus hantar mesej tu (guna fungsi `_sendMessage` yang sama, parameter `quickReplyText`), ditanda `isQuickReply: true` dalam Firestore.
 - **Class Performance Overview + Warning Letter (✅ dikodkan, rujuk Seksyen 5.5)** — `class_performance_screen.dart`: Teacher pilih subjek dia ajar (dropdown), papar "Class Health Score" (purata `percentage` semua student yang dah digred dalam subjek tu) + breakdown Safe/At-Risk/Barred (>=70% / 50-69% / <50%). Senarai student enrolled dalam subjek tu (query `users` sama macam Group Chat) digabung dengan data `performance/{subjectLevel}/students` (kalau belum ada rekod, papar "Not graded yet"). Tekan "%" pada row student untuk buka dialog masukkan markah baru (0-100) — `trend` (Steady/Dropping/Critical) dikira **automatik** berdasarkan beza markah baru vs lama (drop >=15 mata = Critical, drop < 15 = Dropping, selain itu Steady), bukan dipilih manual oleh teacher. Student dengan trend "Critical" papar butang "Send Warning Letter" (dialog reason boleh edit, prefilled cadangan mesej) — cipta dokumen `warningLetters` guna `parentUid` dari profile student (`users/{uid}.parentUid`); kalau student tiada parent linked, papar mesej ralat dan tidak hantar. Setiap student ada butang "History" (bottom sheet senarai warning letter yang pernah dihantar untuk dia, `orderBy sentAt desc`).
 - **Attendance (✅ dikodkan, rujuk Seksyen 5.8)** — `take_attendance_screen.dart` (Teacher): pilih subjek + tarikh, senarai student enrolled dipapar dengan togol Present/Absent (default Present, ada "Mark All Present"/"Mark All Absent"), simpan sebagai satu dokumen per student dalam `attendance/{studentUid}/records` guna document ID deterministik (`{subjectLevel}_{yyyy-MM-dd}`) supaya tandakan semula subjek+tarikh yang sama overwrite rekod asal. `attendance_overview_screen.dart` (Student): papar Attendance Rate (%), jumlah kelas dihadiri, dan amaran "Low attendance warning" kalau rate < 75%, dengan dropdown filter ikut subjek dan senarai rekod penuh.
-- **Parent Module (✅ dikodkan, rujuk Seksyen 5.9)** — Admin pautkan akaun Parent ke akaun Student lewat `link_parent_child_screen.dart` (accessible dari `manage_users_screen.dart` → "Link Child" pada row Parent), tulis `parentUid`/`childUid` serentak dalam satu batch supaya kedua-dua field sentiasa segerak. `parent_dashboard.dart` kini `ChatListScreen` sebenar (bukan placeholder lagi) — sama corak dengan Teacher/Student: FAB "Message a Teacher" (guna `UserSearchScreen` generik yang sama), nav bar ada "My Child" (→ `child_overview_screen.dart`, tab Attendance + Performance untuk anak yang dipautkan, read-only, papar mesej "belum dipautkan, hubungi Admin" kalau `childUid` masih null) dan ikon "Warning Letters" (→ `parent_warning_letters_screen.dart`, senarai warning letter berkaitan anak, boleh tekan "Mark Read" untuk kemaskini `acknowledged`). Tiada perubahan Firestore rules diperlukan — rules untuk `attendance`/`warningLetters` yang parent-aware sudah sedia dari modul Attendance & Class Performance sebelum ni, cuma baru betul-betul "dipakai" sekarang.
+- **Parent Module (✅ dikodkan, rujuk Seksyen 5.9)** — Admin pautkan akaun Parent ke SATU ATAU LEBIH akaun Student lewat `link_parent_child_screen.dart` (accessible dari `manage_users_screen.dart` → "Link Child"/"Link Another Child" pada row Parent), tulis `parentUid`/`childUids` (array, `arrayUnion`) serentak dalam satu batch. `manage_users_screen.dart` ada menu tambahan "Manage Children" untuk unlink anak tertentu bila parent ada 2+ anak. `parent_dashboard.dart` kini `ChatListScreen` sebenar (bukan placeholder lagi) — sama corak dengan Teacher/Student: FAB "Message a Teacher" (guna `UserSearchScreen` generik yang sama), nav bar ada "My Child" (→ `child_overview_screen.dart`, dropdown pemilih anak di AppBar bila 2+ anak dipautkan, tab Attendance + Performance untuk anak yang dipilih, read-only, papar mesej "belum dipautkan, hubungi Admin" kalau `childUids` kosong) dan ikon "Warning Letters" (→ `parent_warning_letters_screen.dart`, senarai warning letter SEMUA anak dalam satu inbox, boleh tekan "Mark Read" untuk kemaskini `acknowledged`). Firestore rules `attendance` diubah untuk sokong array (`studentUid in ...childUids`, rujuk Seksyen 6) — `performance`/`warningLetters` tak perlu ubah, dah guna `parentUid` terus pada rekod.
 - **On-Duty / Off-Duty Toggle (✅ dikodkan, rujuk Seksyen 5.10)** — ikon `work_outline`/`work_off_outlined` dalam AppBar `teacher_dashboard.dart` (`ChatListScreen.extraActions`, param baru), StreamBuilder live pada `users/{uid}.dutyStatus` supaya ikon+warna sentiasa terkini. Tekan untuk tukar status terus (tiada dialog confirm - reversible, rendah risiko), papar SnackBar mengesahkan. Kesan sebenar: `chat_screen.dart` kini kira "chat terbuka" = jadual office hour automatik **DAN** teacher berkaitan chat tu tak "off_duty" (`_computeIsOfficeHour()`) — kalau teacher tukar ke Off-Duty, SEMUA chat dia terus locked serta-merta (guna banner+Overtime Mode UI yang sama macam luar waktu pejabat), walaupun masih dalam waktu berjadual. `_relevantTeacherUid` (diri sendiri untuk Teacher, `otherUserUid`/`groupAdmin` untuk Student/Parent) di-watch live supaya lock terus update kalau teacher toggle semasa chat screen terbuka.
 - **Interactive Quiz — Live Session (✅ dikodkan, rujuk Seksyen 9)** — Teacher: `quiz_list_screen.dart` ("My Quizzes") → `create_quiz_screen.dart` (tajuk, subjek, mod, soalan aneka pilihan 4 opsyen + time limit + points) → tekan quiz untuk `host_quiz_session_screen.dart` (generate join code 6-digit, waiting room dengan senarai student join secara live, kawal "Next Question"/"End Quiz", leaderboard akhir). Student: FAB "Join a Quiz" → `join_quiz_screen.dart` (masukkan join code) → `live_quiz_play_screen.dart` (StreamBuilder ikut `quizSessions.status`/`currentQuestionIndex`, countdown timer disegerakkan guna `currentQuestionStartedAt`, submit jawapan, leaderboard). Firestore rules ditambah untuk `quizzes`/`quizSessions` (rujuk firestore.rules) — markah dikira & ditulis client-side (had FYP yang sama macam file validation, tiada Cloud Function). UI/UX guna palet vibrant gaya Wayground/Kahoot (`quiz_theme.dart` — 4 warna+bentuk opsyen, gradient ungu, leaderboard podium dikongsi via `quiz_leaderboard_view.dart`).
 - **Interactive Quiz — Self-Paced (✅ dikodkan, rujuk Seksyen 9.6)** — Teacher pilih mod "Self-Paced"/"Both" semasa cipta quiz. Student: FAB/nav bar "Self-Paced Quizzes" → `self_paced_quiz_list_screen.dart` (senarai quiz untuk subjek dia, badge markah kalau dah submit) → `attempt_quiz_screen.dart` (jawab semua soalan sekali gus, tiada timer, submit sekali sahaja - dwi-mod Attempt/Review dalam satu skrin). `quizAttempts/{quizId}_{studentUid}` (ID deterministik, elak retake & elak keperluan index).
@@ -521,18 +523,24 @@ Student buka "My Attendance" (`attendance_overview_screen.dart`, dari nav bar
 
 ```
 Prasyarat - Admin pautkan Parent ↔ Student (sebelum ni TIADA cara buat ni
-langsung dalam app - `parentUid`/`childUid` wujud dalam skema sejak awal
-tapi tak pernah ditulis oleh mana-mana skrin, rujuk nota dalam 3.1):
+langsung dalam app - `parentUid`/`childUids` wujud dalam skema sejak awal
+tapi tak pernah ditulis oleh mana-mana skrin, rujuk nota dalam 3.1). ✅
+Satu Parent boleh ada LEBIH DARI SATU anak berdaftar (rujuk kemas kini
+di bawah):
    Admin buka Manage Users → row dengan role "Parent" → menu "..." →
-   "Link Child" → LinkParentChildScreen(parentUid, parentName)
+   "Link Child" (atau "Link Another Child" kalau dah ada anak) →
+   LinkParentChildScreen(parentUid, parentName)
       → Senarai semua Student (boleh search by nama)
       → Admin tekan satu Student → dialog confirm →
         SATU WriteBatch:
-           users/{parentUid}.childUid = studentUid
+           users/{parentUid}.childUids = arrayUnion([studentUid])
            users/{studentUid}.parentUid = parentUid
-      → Kembali ke Manage Users, row Parent papar "Linked to: {nama student}"
-   (Boleh "Unlink Child" bila-bila - batch yang sama tapi FieldValue.delete()
-   pada kedua-dua field.)
+      → Kembali ke Manage Users, row Parent papar "Linked to: {nama1},
+        {nama2}, ..." (semua anak, dipisah koma)
+   → Menu "Manage Children" (hanya muncul kalau childUids tak kosong) →
+     dialog senarai semua anak dipautkan, setiap satu ada butang unlink
+     (ikon link_off) sendiri - buang SATU anak sahaja dari senarai,
+     bukan semua sekali
 
 Parent login → ParentDashboard = ChatListScreen terus (✅ REDESIGN - dulu
    placeholder statik "coming soon", sekarang corak sama macam Teacher/
@@ -545,31 +553,37 @@ Parent login → ParentDashboard = ChatListScreen terus (✅ REDESIGN - dulu
         - Butang teks "My Child" → ChildOverviewScreen
 
 ChildOverviewScreen (read-only, tiada butang edit/hantar):
-   → Fetch users/{myUid}.childUid
-        - Null → papar "Your account isn't linked to a student yet.
+   → Fetch users/{myUid}.childUids (array)
+        - Kosong → papar "Your account isn't linked to a student yet.
           Please contact an Admin to link your child." (HENTI di sini)
-   → Fetch users/{childUid} untuk nama & senarai subjek
-   → Tab "Attendance": StreamBuilder attendance/{childUid}/records - sama
-     pengiraan macam attendance_overview_screen.dart (rate, warning < 75%)
-   → Tab "Performance": untuk setiap subjek anak, get()
+   → Fetch users/{uid} untuk SETIAP childUid (nama & senarai subjek)
+   → ✅ Kalau childUids.length > 1: dropdown kat AppBar (papar nama setiap
+     anak) untuk parent pilih/tukar anak mana nak ditengok - tab
+     Attendance/Performance di bawah terus refresh ikut anak yang dipilih
+     (kalau cuma 1 anak, dropdown ni disembunyikan terus, tiada beza UX)
+   → Tab "Attendance": StreamBuilder attendance/{childUid}/records (childUid
+     anak yang sedang dipilih) - sama pengiraan macam
+     attendance_overview_screen.dart (rate, warning < 75%)
+   → Tab "Performance": untuk setiap subjek anak yang dipilih, get()
      performance/{subjectLevel}/students/{childUid} - papar percentage +
      trend (sama visual macam class_performance_screen.dart tapi tiada
      butang "%"/"Send Warning Letter" - viewing sahaja)
 
 ParentWarningLettersScreen:
    → Query warningLetters where parentUid == myUid, orderBy sentAt desc
+     (TIADA perubahan diperlukan untuk multi-child - letter setiap satu
+     dah tanda parentUid terus, jadi parent nampak surat SEMUA anak dia
+     dalam satu inbox tanpa perlu iterate childUids)
    → Setiap letter belum "acknowledged" papar butang "Mark Read" → update
      acknowledged: true (firestore.rules dah benarkan parentUid buat ni
      sejak modul Class Performance dibina - rujuk 5.5 - skrin ni first
      consumer sebenar untuk field tu)
 
-Nota: TIADA perubahan firestore.rules diperlukan untuk seluruh modul ni -
-rules untuk `attendance`, `performance`, dan `warningLetters` yang
-parent-aware (guna childUid/parentUid) semuanya sudah sedia dari modul
-Attendance & Class Performance sebelum ni. Hanya SATU index Firestore baru
-diperlukan: warningLetters (parentUid ASC, sentAt DESC) - untuk query
-ParentWarningLettersScreen (index studentUid+sentAt yang sedia ada tak
-boleh dipakai sebab field equality yang berbeza).
+Nota: Firestore rules untuk `performance` dan `warningLetters` yang
+parent-aware TIDAK perlu berubah untuk multi-child (kedua-dua guna
+`parentUid` terus pada rekod, bukan iterate childUids). HANYA rule
+`attendance` yang perlu ubah - dari semakan `== studentUid` (satu anak)
+kepada `studentUid in ...childUids` (array, rujuk Seksyen 6).
 ```
 
 ### 5.10 Aliran On-Duty / Off-Duty Toggle (✅ Sudah dilaksanakan)
@@ -801,8 +815,8 @@ rujuk juga 5.7):
      akaun ORANG LAIN, yang tetap perlukan Cloud Function `deleteUserAccount`
      (✅ dibina, rujuk 5.7) sebab client SDK tak boleh padam akaun Auth
      orang lain atas sebab keselamatan Firebase.
-     TIADA cleanup rentas-akaun (contoh: kosongkan childUid pada dokumen
-     Parent kalau Student yang dipadam ada parentUid) - trade-off diterima
+     TIADA cleanup rentas-akaun (contoh: buang uid dari childUids pada
+     dokumen Parent kalau Student yang dipadam ada parentUid) - trade-off diterima
      untuk kedua-dua laluan delete (self-service dan Admin).
 ```
 
@@ -857,12 +871,92 @@ Had skop (Web Push):
      Android/foreground.
 ```
 
+### 5.16 Aliran Delete Message (✅ Sudah dilaksanakan)
+
+Sebelum ni `firestore.rules` sengaja `allow update, delete: if false;` untuk `messages` — mesej memang direka create-only (rujuk CLAUDE.md), untuk elak sesiapa tokok-tambah/hapus rekod perbualan (penting untuk isu macam bullying/dispute antara student). Ciri ni tambah SATU pengecualian sempit, bukan buang keputusan asal tu:
+
+```
+Long-press mesej dalam ChatScreen
+   → _canDeleteMessage(data, isMe) check dulu (client-side, sekadar UX -
+     server tetap re-check semua ni via firestore.rules):
+        - Dah 'deleted' sedia ada? → tak boleh (elak double-action)
+        - Admin? → boleh, bila-bila masa
+        - Sender sendiri DAN dalam 15 minit dari timestamp hantar? → boleh
+        - Selain itu → tak boleh (long-press tak buat apa-apa)
+   → AlertDialog confirm ("Delete this message for everyone...")
+   → messages/{messageId}.update({ deleted: true, deletedAt: serverTimestamp() })
+   → firestore.rules re-check server-side: update DIHADKAN KETAT ke field
+     `deleted`/`deletedAt` sahaja (diff().affectedKeys().hasOnly([...])) -
+     kandungan asal (text/attachmentUrl/dll) TIDAK disentuh/dipadam, cuma
+     ditanda. Sender lepas 15 minit ATAU bukan sender ATAU bukan Admin →
+     rules tolak walaupun client cuba
+   → UI: mesej yang `deleted == true` papar "This message was deleted"
+     (italic, muted) menggantikan text/attachment sebenar - untuk KEDUA-DUA
+     pihak (sender dan penerima), bukan setakat sender
+```
+
+> **Nota reka bentuk:** Soft-delete dipilih (bukan hard-delete/buang terus dari Firestore) - kandungan asal KEKAL dalam dokumen (hanya `deleted`/`deletedAt` ditambah), so rekod audit tak hilang terus walaupun UI dah sorok kandungan tu. Had masa 15 minit untuk sender (Admin tiada had) — elak abuse macam sender cuba sorok mesej lama-lama selepas isu timbul, tapi masih bagi ruang betulkan typo/regret terus lepas hantar.
+
+---
+
+### 5.17 Aliran MFA — Email OTP (✅ Sudah dilaksanakan & disahkan berfungsi)
+
+**Wajib untuk SEMUA role, pada SETIAP sign-in baharu** (login DAN self-registration). Firebase Auth **tiada** cara built-in untuk hantar kod OTP custom via email — MFA native Firebase cuma sokong SMS atau TOTP (authenticator app). Ciri ni pelaksanaan custom, guna Cloud Function + Gmail SMTP (percuma, tiada kos SMS/API pihak ketiga).
+
+```
+LoginScreen._login() ATAU RegisterScreen._register() berjaya (password betul /
+akaun baru dicipta)
+   → Kira `destination` (dashboard ikut role) macam biasa (switch-case sedia ada)
+   → pushAndRemoveUntil ke MfaVerificationScreen(destination: destination)
+        (BUKAN terus ke destination - itu keputusan LAMA, kini MFA jadi
+        get langkah wajib di antara)
+   → MfaVerificationScreen.initState() → panggil Cloud Function `sendMfaCode`
+        - Function generate kod 6-digit rawak (crypto.randomInt)
+        - Simpan HASH (SHA-256) kod tu dalam mfaCodes/{uid} + expiresAt
+          (5 minit) + attempts:0 — plaintext kod TIDAK PERNAH disimpan
+        - Hantar email plaintext kod tu ke email caller SENDIRI (dari
+          request.auth.token.email - tiada parameter "target email", jadi
+          function ni tak boleh disalahguna untuk spam alamat sesiapa).
+          Email guna template HTML branded (`buildMfaEmailHtml()` dalam
+          functions/index.js - header biru "TuturEdu", kod dipaparkan
+          besar dalam kotak, footer nama pusat tuisyen), bukan plain text
+          sahaja - `text` field kekal sebagai fallback untuk email client
+          yang tak render HTML
+        - Guna nodemailer + Gmail SMTP (kredential dari Cloud Functions
+          secrets MFA_SMTP_USER/MFA_SMTP_PASS - rujuk nota setup di bawah)
+   → User masukkan kod 6-digit → tekan "Verify" → panggil Cloud Function
+     `verifyMfaCode({code})`
+        - Function check: kod belum expired, attempts < 5, hash(code) sepadan
+        - Betul → padam dokumen mfaCodes/{uid} (sekali guna), pulang success
+        - Salah → attempts += 1, throw error (client papar mesej)
+        - Expired/terlalu banyak attempts → padam dokumen, minta kod baru
+   → Verify berjaya → MfaVerificationScreen buat pushAndRemoveUntil KEDUA
+     ke `destination` sebenar (route MfaVerificationScreen sendiri turut
+     dibuang dari stack, hanya destination tinggal)
+   → "Cancel and sign out" (atau expired/terlalu banyak attempts berulang
+     kali) → FirebaseAuth.signOut() → pushAndRemoveUntil ke WelcomeScreen
+```
+
+> **Skop nota penting (rujuk CLAUDE.md juga):** `AuthGate` (Seksyen 5.1) tetap persist session merentasi app restart di Android/iOS macam sebelum ni — MFA screen ni HANYA muncul pada saat `signInWithEmailAndPassword`/`createUserWithEmailAndPassword` sebenar dipanggil (login/register baharu), BUKAN setiap kali app dibuka semula dengan session yang dah wujud. Ini trade-off yang sengaja diterima (sama macam kebanyakan app sebenar — MFA verify sekali time sign-in, bukan setiap kali app foreground) untuk elak konflik dengan kerja AuthGate session-persistence yang dah dibina. Web tak terjejas oleh isu ni langsung sebab Web memang dah `Persistence.NONE` — sentiasa perlukan sign-in baharu (dan dengan itu MFA baharu) pada setiap reload.
+>
+> **Setup manual (✅ sudah siap - akaun `tuturedu.support@gmail.com` dipakai sebagai pengirim):** langkah asal untuk rujukan/reset masa depan (contoh App Password perlu regenerate):
+> 1. Enable 2-Step Verification pada akaun Gmail yang nak dipakai untuk hantar OTP
+> 2. Generate App Password di myaccount.google.com/apppasswords
+> 3. Set DUA secret guna Firebase CLI (jalan sendiri dalam terminal sendiri, JANGAN paste password ke chat/AI mana-mana — nilai secret patut hanya lalui sesi CLI awak sendiri):
+>    ```
+>    firebase functions:secrets:set MFA_SMTP_USER
+>    firebase functions:secrets:set MFA_SMTP_PASS
+>    ```
+> 4. Deploy: `firebase deploy --only functions`
+>
+> **Had & trade-off diterima:** Kod OTP disimpan sebagai hash (bukan plaintext) dalam Firestore, expire 5 minit, had 5 attempts sebelum kena minta kod baru. Tiada rate-limit untuk "resend" di peringkat server (client-side sahaja, cooldown 30 saat) — trade-off diterima untuk skop FYP, boleh upgrade guna App Check/Cloud Functions rate-limiting masa depan kalau perlu.
+
 ---
 
 ## 6. Firestore Security Rules (Ringkasan)
 
 - **Fungsi `isAdmin()`** — helper yang check role user semasa dari `users/{uid}` sama ada `"Admin"`; digunakan dalam rules `users` dan `subjectCatalog`
-- `users` — boleh dibaca oleh sesiapa yang login; boleh diedit oleh pemilik akaun sendiri **ATAU** oleh Admin (guna `isAdmin()`) — `write` dalam Firestore rules meliputi create/update/DELETE, jadi rule sedia ada ni juga yang benarkan self-delete akaun dari Settings (rujuk 5.14), tiada rule berasingan diperlukan. Rule sedia ada ni cukup untuk Admin tulis `parentUid`/`childUid` pada DUA dokumen user berlainan dalam satu batch (link_parent_child_screen.dart, rujuk 5.9) — tiada perubahan rule diperlukan sebab `isAdmin()` benarkan Admin tulis mana-mana dokumen `users`. Sama juga untuk `fcmTokens`/`pushEnabled`/`leaveStart`/`leaveEnd` (rujuk 5.12/5.14) — user tulis field-field tu pada dokumen sendiri sahaja, rule sedia ada dah cukup, tiada perubahan diperlukan untuk seluruh Settings screen
+- `users` — boleh dibaca oleh sesiapa yang login; boleh diedit oleh pemilik akaun sendiri **ATAU** oleh Admin (guna `isAdmin()`) — `write` dalam Firestore rules meliputi create/update/DELETE, jadi rule sedia ada ni juga yang benarkan self-delete akaun dari Settings (rujuk 5.14), tiada rule berasingan diperlukan. Rule sedia ada ni cukup untuk Admin tulis `parentUid`/`childUids` pada DUA dokumen user berlainan dalam satu batch (link_parent_child_screen.dart, rujuk 5.9) — tiada perubahan rule diperlukan sebab `isAdmin()` benarkan Admin tulis mana-mana dokumen `users`. Sama juga untuk `fcmTokens`/`pushEnabled`/`leaveStart`/`leaveEnd` (rujuk 5.12/5.14) — user tulis field-field tu pada dokumen sendiri sahaja, rule sedia ada dah cukup, tiada perubahan diperlukan untuk seluruh Settings screen
 - `subjectCatalog` — boleh dibaca oleh sesiapa yang login; hanya Admin boleh tulis (tambah/edit/padam)
 - `chats` — hanya participant yang terlibat boleh baca/tulis, ATAU Admin boleh baca (ditambah untuk `admin_reports_screen.dart`'s `count()` aggregation, rujuk 5.11 - awalnya terlepas, punca bug permission-denied bila Reports mula-mula dibina)
 - `chats/{chatId}/messages` — mesej hanya boleh dicipta (bukan edit/padam), dan `senderId` mesti padan dengan pengguna yang login
@@ -888,9 +982,9 @@ lib/
 ├── screens/
 │   ├── auth_gate.dart                   // ✅ root widget - check session sedia ada (rujuk 5.1) sebelum papar welcome_screen.dart
 │   ├── welcome_screen.dart              // ✅ entry point tanpa session, EN
-│   ├── about_arena_matriks_screen.dart  // ✅ page statik "Tentang Kami" - boleh diakses dari WelcomeScreen & LoginScreen (pra-login), tiada Firestore/Auth
 │   ├── register_screen.dart             // ✅ sign up, EN
 │   ├── login_screen.dart
+│   ├── mfa_verification_screen.dart     // ✅ Email OTP wajib pada setiap sign-in, rujuk 5.17
 │   ├── student_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
 │   ├── teacher_dashboard.dart           // ✅ = ChatListScreen dikonfigur (bukan skrin menu)
 │   ├── parent_dashboard.dart            // ✅ = ChatListScreen dikonfigur (bukan placeholder lagi, rujuk 5.9)
@@ -946,7 +1040,7 @@ web/
 
 functions/                              // ✅ projek Node.js BERASINGAN (bukan lib/, bukan Dart/Flutter)
 ├── package.json                        // firebase-admin, firebase-functions v2
-└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter (rujuk 5.12/5.15) + deleteUserAccount (callable, rujuk 5.7)
+└── index.js                            // ✅ onNewChatMessage + onNewWarningLetter (rujuk 5.12/5.15) + deleteUserAccount (rujuk 5.7) + sendMfaCode/verifyMfaCode (rujuk 5.17)
 
 android/app/src/main/res/               // ✅ ikon launcher ditukar (rujuk 4.1), + raw/ untuk bunyi Android
 ├── mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png  // ✅ mark TuturEdu, latar putih
@@ -1046,6 +1140,10 @@ match /chats/{chatId}/attachments/{fileName} {
 > **Nota kedua (dijumpai 2026-08-16, bug sebenar dilaporkan Teacher tak boleh upload):** `allow write` yang asal turut ada semakan `firestore.get(...).data.participants` yang sama macam `allow read`. Disahkan melalui diagnostic test (buang firestore.get(), test upload, letak balik) bahawa semakan ni gagal **setiap kali** untuk write request dari Flutter Web — kategori masalah yang sama macam `request.resource.size` di atas: resumable-upload protocol Firebase Storage untuk Web menilai rule masa request session-start, dan cross-service read (`firestore.get()`) tak resolve dengan reliable pada peringkat tu. `allow read` biasa (GET request tunggal, bukan resumable) tak terjejas — kekal ketat ikut participants.
 >
 > `allow write` sekarang dilonggarkan ke `request.auth != null` sahaja (mana-mana user yang dah login). Mitigation: fail yang di-upload oleh bukan-participant tak boleh muncul sebagai mesej sebenar kepada sesiapa, sebab `firestore.rules`'s `messages/{messageId}` create rule (write Firestore biasa, tak terjejas oleh bug Storage ni) tetap wajibkan `senderId == request.auth.uid` DAN sender kena dalam `participants` chat tu. Jadi paling teruk, seseorang boleh "buang" fail dalam Storage folder chat orang lain tanpa sesiapa nampak — bukan kebocoran data yang boleh dibaca, cuma potensi storage litter. Trade-off diterima untuk skop FYP ni.
+>
+> **Nota ketiga (dijumpai 2026-08-24, upload masih gagal SEKALI-SEKALA lepas fix di atas):** Disahkan via diagnostic lanjut — walaupun rule dilonggarkan ke `allow write: if true` (langsung tiada semakan), upload PUN masih boleh gagal dengan `storage/unauthorized`. Ni buktikan masalah ni BUKAN langsung isu Firestore/Storage Rules content. Fix pertama cuba: retry `putData()` sehingga 3 kali (delay 700ms) khusus untuk error code `unauthorized` — **tak menyelesaikan masalah sepenuhnya**, rujuk Nota keempat.
+>
+> **Nota keempat (dijumpai 2026-09-07, punca sebenar dikenalpasti):** Punca sebenar bukan upload (`putData`, method PUT) langsung — DevTools Network tab tunjuk dengan jelas request yang 403 tu adalah **GET**, bukan PUT. `_pickAndSendAttachment()` panggil `storageRef.getDownloadURL()` sejurus selepas upload selesai, dan panggilan tu re-evaluate klausa `allow read` (yang cross-check `firestore.get(...).data.participants`) — masalah firestore.get()-tak-reliable-time-Storage-request yang sama macam Nota kedua (untuk `write`) rupanya turut berlaku pada GET metadata ni sekali-sekala, sejurus lepas resumable upload session tutup. Ini jelaskan kenapa test `allow write: if true` tak selesaikan apa-apa (write memang tak pernah rosak) dan kenapa fix retry-`putData()`-sahaja (Nota ketiga) tak cukup (kegagalan sebenar satu langkah lepas tu). Fix akhir: `getDownloadURL()` sendiri kini dibalut dengan retry-and-refresh loop yang sama (`currentUser.getIdToken(true)` + delay 700ms, sehingga 3 percubaan) khusus untuk error code `unauthorized`. **Pengajaran:** bila debug error Storage macam ni lain kali, sahkan dulu method request yang 403 (GET vs PUT) dalam DevTools sebelum andaikan ia rule yang baru disentuh.
 
 ### 8.9 UI Bubble Attachment dalam Chat
 
@@ -1172,7 +1270,7 @@ match /quizAttempts/{attemptId} {
 - [x] Register screen (Sign Up, EN) — auto-create Firebase Auth + Firestore profile
 - [x] Login & role-based routing
 - [x] Session persistence (AuthGate, rujuk Seksyen 5.1) — app tak minta login semula bila dibuka semula dengan session sah (Web sengaja dikecualikan — rujuk nota dalam 5.1)
-- [x] About page (Pusat Tuisyen Arena Matriks) — diakses dari WelcomeScreen & LoginScreen sebelum log in
+- [x] "About Pusat Tuisyen Arena Matriks" (story, What We Offer, Operating Hours) disambung terus dalam WelcomeScreen di bawah butang Log In/Sign Up — bukan page/route berasingan lagi
 - [x] Firebase Authentication + Firestore integration
 - [x] Real-time chat antara student & teacher
 - [x] Office hour lock logic (global)
@@ -1197,6 +1295,9 @@ match /quizAttempts/{attemptId} {
 - [x] Android APK — `flutter build apk --release` disahkan berfungsi, ikon launcher ditukar dari default Flutter (rujuk 4.1). Package name `com.example.tuturedu` & debug signing masih placeholder - cukup untuk sideload/demo, belum sedia untuk publish Play Store
 - [x] Full Admin account deletion (Cloud Function `deleteUserAccount` — padam dokumen Firestore DAN akaun Firebase Authentication sekali gus, rujuk Seksyen 5.7; BEZA dengan self-delete akaun sendiri yang dah dibina dalam Settings, Seksyen 5.14)
 - [x] URL Phishing Detection dalam chat (heuristic client-side, rujuk Seksyen 11)
+- [x] Delete Message (soft-delete, sender 15 minit / Admin bila-bila, rujuk Seksyen 5.16)
+- [x] MFA — Email OTP wajib untuk semua role pada setiap sign-in baharu (rujuk Seksyen 5.17) — secret Gmail App Password dah disetup & disahkan berfungsi (email OTP branded HTML diterima sebenar semasa testing)
+- [x] Parent Module sokong 2+ anak setiap parent (`childUids` array, dropdown pemilih anak di ChildOverviewScreen, "Manage Children" di Admin, rujuk Seksyen 5.9)
 
 ---
 

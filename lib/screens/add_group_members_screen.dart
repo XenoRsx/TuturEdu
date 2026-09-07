@@ -33,9 +33,12 @@ class _AddGroupMembersScreenState extends State<AddGroupMembersScreen> {
 
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).update({
-        'participants': FieldValue.arrayUnion(_selectedUids.toList()),
-      });
+      await FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .update({
+            'participants': FieldValue.arrayUnion(_selectedUids.toList()),
+          });
       if (mounted) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -66,7 +69,9 @@ class _AddGroupMembersScreenState extends State<AddGroupMembersScreen> {
                 }
 
                 final candidates = snapshot.data!.docs
-                    .where((doc) => !widget.existingParticipants.contains(doc.id))
+                    .where(
+                      (doc) => !widget.existingParticipants.contains(doc.id),
+                    )
                     .toList();
 
                 if (candidates.isEmpty) {
@@ -76,7 +81,11 @@ class _AddGroupMembersScreenState extends State<AddGroupMembersScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.people_outline, size: 56, color: Colors.grey.shade300),
+                          Icon(
+                            Icons.people_outline,
+                            size: 56,
+                            color: Colors.grey.shade300,
+                          ),
                           const SizedBox(height: 12),
                           Text(
                             'Every student enrolled in "${widget.subject}" is '
@@ -104,8 +113,15 @@ class _AddGroupMembersScreenState extends State<AddGroupMembersScreen> {
                           return CheckboxListTile(
                             value: selected,
                             selected: selected,
-                            selectedTileColor: Colors.green.withValues(alpha: 0.06),
-                            title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                            selectedTileColor: Colors.green.withValues(
+                              alpha: 0.06,
+                            ),
+                            title: Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                             secondary: CircleAvatar(
                               backgroundColor: Colors.green.shade100,
                               child: Text(
@@ -134,7 +150,9 @@ class _AddGroupMembersScreenState extends State<AddGroupMembersScreen> {
                           width: double.infinity,
                           height: 48,
                           child: ElevatedButton.icon(
-                            onPressed: _selectedUids.isEmpty || _saving ? null : _addSelected,
+                            onPressed: _selectedUids.isEmpty || _saving
+                                ? null
+                                : _addSelected,
                             icon: _saving
                                 ? const SizedBox(
                                     width: 18,

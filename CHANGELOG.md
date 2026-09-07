@@ -10,6 +10,82 @@ was committed.
 
 ### Added
 
+- **Multi-child support for the Parent Module** — a parent can now be
+  linked to 2 or more students. `users/{parentUid}.childUid` (a single
+  string) became `childUids` (an array, via `FieldValue.arrayUnion`/
+  `arrayRemove`). `link_parent_child_screen.dart` can link additional
+  children without clobbering earlier links; `manage_users_screen.dart`
+  gained a "Manage Children" action listing every linked child with its
+  own unlink button; `child_overview_screen.dart` shows a dropdown child
+  picker in the AppBar once there's more than one (hidden entirely for
+  the common single-child case, so no UX change for most parents).
+  `firestore.rules`' `attendance` rule changed from an equality check to
+  an array-membership check (`studentUid in ...childUids`) —
+  `performance`/`warningLetters` rules already keyed off `parentUid`
+  directly on each record and needed no changes.
+- **Clean auth error dialogs** — Login and Sign Up no longer show raw
+  Firebase exception text (e.g.
+  `[firebase_auth/wrong-password] The password is invalid...`). A new
+  `lib/utils/auth_error_dialog.dart` maps known `FirebaseAuthException`
+  codes to plain-language messages and shows them in an `AlertDialog`
+  instead of a `SnackBar` (a login failure shouldn't be missable).
+  `user-not-found` and `wrong-password`/`invalid-credential` deliberately
+  share one message ("Incorrect email or password") to avoid leaking
+  which registered emails exist.
+- **MFA (email OTP)** — mandatory second factor for every role on every
+  fresh sign-in (login and self-registration alike). After password auth
+  succeeds, both flows route through a new `MfaVerificationScreen` that
+  requests a 6-digit code (via new `sendMfaCode`/`verifyMfaCode` Cloud
+  Functions, emailed through Gmail SMTP/nodemailer) before letting the
+  user reach their dashboard. Firebase Auth has no built-in "email OTP"
+  multi-factor option (native support is SMS/TOTP only), so this is a
+  from-scratch implementation: codes are SHA-256-hashed and stored in
+  `mfaCodes/{uid}` with a 5-minute expiry and a 5-attempt cap; Firestore
+  rules deny all client access to that collection outright. Scope note:
+  this only fires on an actual sign-in call, not on `AuthGate` silently
+  resuming a persisted session (Android/iOS) — see BLUEPRINT.md 5.17 for
+  the full trade-off rationale. Required a one-time manual setup (a Gmail
+  App Password set as Cloud Functions secrets, sending from
+  `tuturedu.support@gmail.com`) — done and confirmed working end-to-end.
+  The email itself uses a branded HTML template (`buildMfaEmailHtml()` in
+  `functions/index.js`) instead of plain text — a blue header bar, the
+  code in a large letter-spaced box, and a footer with the centre's name.
+- **Delete Message** (soft-delete) — long-press a chat bubble to delete it.
+  Sender can delete their own message within 15 minutes of sending; an
+  Admin can delete any message any time (moderation). This is one narrow,
+  server-verified exception to messages otherwise being create-only
+  (`firestore.rules`' `messages/{messageId}` now allows an `update` that
+  is restricted to exactly the `deleted`/`deletedAt` fields — the original
+  content is never cleared, just hidden behind the flag, so an audit trail
+  survives). Deleted messages render as "This message was deleted" for
+  everyone in the chat. See BLUEPRINT.md section 5.16.
+
+### Changed
+
+- `WelcomeScreen` reworked: added a top-right quick-access bar with small
+  "Log In"/"Sign Up" links (in addition to the existing full-size buttons
+  further down); the middle section is wrapped in a scrollable layout so
+  nothing gets clipped on shorter screens/windows; and the "About Pusat
+  Tuisyen Arena Matriks" content (story, "What We Offer", Operating Hours)
+  now continues directly on the same page below the Log In/Sign Up
+  buttons, rather than living on a separate screen you navigate to. The
+  standalone `about_arena_matriks_screen.dart` (added 2026-08-16) was
+  removed as part of this — the content moved, it wasn't dropped. The
+  now-dangling "Learn more about us" link in `login_screen.dart` was
+  removed along with it (its own existing blurb already names the centre).
+  Followed up with a visual polish pass: the About story and "What We
+  Offer" items now sit in elevated white cards, and a footer was added
+  with links to the centre's real Facebook/Instagram/TikTok accounts
+  (circular brand-colored buttons via the new `font_awesome_flutter`
+  dependency, since Material Icons has no Instagram/TikTok logo) plus a
+  copyright line.
+
+---
+
+## 2026-08-21 — Full Admin account deletion & URL phishing detection
+
+### Added
+
 - **Full Admin account deletion** — "Delete User" in Manage Users now calls
   a new `deleteUserAccount` callable Cloud Function (`functions/index.js`,
   `asia-southeast1`) that removes both the Firestore profile and the
@@ -28,6 +104,18 @@ was committed.
   was always static, only file-attachment links were tappable. Safe links
   open directly; flagged ones show a warning icon and require confirming
   an "Open Anyway" dialog first. Speced in BLUEPRINT.md section 11.
+
+### Fixed
+
+- Live Web deploy showed a blank page with no console error — the prior
+  `flutter build web` had silently produced an incomplete `build/web`
+  (missing `favicon.png`, `manifest.json`, `icons/`, and
+  `flutter_service_worker.js`), likely from a stray `dart.exe` process
+  locking files mid-build. `index.html` referenced those missing files,
+  and Firebase Hosting's SPA rewrite served `index.html` for the
+  unmatched requests instead of a 404, so the service worker fetched HTML
+  instead of JS. Deleted `build/web`, rebuilt clean, verified all expected
+  files existed, redeployed.
 
 ---
 

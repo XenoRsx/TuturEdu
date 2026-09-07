@@ -10,12 +10,13 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 
 ## Features
 
-- Welcome Screen — landing page with TuturEdu branding and options to log in or sign up
-- About Page — static "About Pusat Tuisyen Arena Matriks" page, reachable pre-login from both the Welcome and Login screens (no Firestore/Auth dependency)
+- Welcome Screen — landing page with TuturEdu branding, quick-access Log In/Sign Up links at the top plus full-size buttons further down, an "About Pusat Tuisyen Arena Matriks" section (story, What We Offer, Operating Hours) continuing on the same scrollable page, and a footer with links to the centre's Facebook/Instagram/TikTok
 - Sign Up (Self Registration) — users can create their own account; Firebase Authentication and Firestore profile are created together
 - Login & Role-based Access — the system identifies user roles (Student / Teacher / Parent / Admin) after login and routes them to their respective dashboards
+- MFA (Email OTP) — mandatory second factor on every fresh login and sign-up, for every role: a 6-digit code is emailed and must be entered before reaching the dashboard.
 - Session Persistence — an `AuthGate` root widget checks for an existing Firebase Auth session on app start and routes straight to the matching dashboard, so users aren't asked to log in again on every app open
 - Real-time Chat — conversations update live using Cloud Firestore, with read receipts (sent/read ticks) and per-chat unread badges
+- Delete Message — long-press a message to soft-delete it (sender within 15 minutes of sending, or an Admin any time for moderation); the original content is never cleared from Firestore, just hidden behind a `deleted` flag and shown as "This message was deleted" to everyone in the chat
 - Quick Reply Chips — one-tap common replies ("OK", "Yes", "No", "Thank you", "Noted", "Please wait") above the input bar
 - Group Chat — teachers create a group chat per subject/class (pick enrolled students via checkbox), with a Group Info screen for the admin to add/remove members and other members to leave
 - File Attachments — send documents/images in chat (PDF, Office docs, images), validated client-side in 3 layers (size, extension, magic number) before uploading to Firebase Storage; images preview inline, documents open externally
@@ -28,7 +29,7 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - Class Performance Overview — teacher picks a subject, sees a class health score and a Safe/At-Risk/Barred breakdown, grades each student (0–100), and gets an auto-computed trend (Steady/Dropping/Critical) based on the change since their last grade
 - Warning Letter — teacher can send a warning letter to a student's linked parent when their trend turns Critical, with a per-student sending history
 - Attendance — teacher takes attendance per subject/date (Present/Absent, "Mark All" shortcuts); student sees their attendance rate, a Safe/Low breakdown, and a low-attendance warning below 75%
-- Parent Module — Admin links a Parent account to a Student account; the parent then gets a real chat-list dashboard (message any teacher), a read-only "My Child" view (attendance + performance), and a Warning Letters inbox they can mark as read
+- Parent Module — Admin links a Parent account to one or more Student accounts (a parent can have 2+ children linked); the parent then gets a real chat-list dashboard (message any teacher), a read-only "My Child" view (attendance + performance, with a child picker when there's more than one), and a Warning Letters inbox covering all their children that they can mark as read
 - Admin Dashboard — manage user accounts (view, change role, fully delete — both Firestore profile and Firebase Auth account, via a Cloud Function), manage the subject/level catalog, and a Reports screen with live system-wide stats (users, chats, quizzes, attempts, warning letters)
 - Push Notifications — a Cloud Function sends a real push notification on new chat messages and new warning letters, delivered even when the app isn't open. Live on Web (VAPID key configured and deployed) — see BLUEPRINT.md 5.12.
 - Settings — every role gets Edit Profile, Change Password (re-authenticates first), a Push Notifications on/off toggle, a choice of 3 notification sounds, Log Out, and self-service Delete Account (re-authenticates, then removes their own Firestore profile and Firebase Auth account — no Cloud Function needed for deleting your *own* account, unlike Admin deleting someone else's). Teachers additionally get Leave/Holiday dates, which auto-lock their chats for that date range on top of the manual On-Duty/Off-Duty toggle.
@@ -55,9 +56,9 @@ lib/
 ├── screens/
 │   ├── auth_gate.dart                # Root widget - routes to dashboard if a session exists, else WelcomeScreen
 │   ├── welcome_screen.dart           # Landing screen (Log In / Sign Up)
-│   ├── about_arena_matriks_screen.dart # Static "About" page, reachable pre-login
 │   ├── register_screen.dart          # Self sign-up screen
 │   ├── login_screen.dart             # Login screen
+│   ├── mfa_verification_screen.dart  # Mandatory email OTP after login/sign-up, every role
 │   ├── student_dashboard.dart        # = ChatListScreen configured for Student
 │   ├── teacher_dashboard.dart        # = ChatListScreen configured for Teacher
 │   ├── parent_dashboard.dart         # = ChatListScreen configured for Parent
@@ -84,7 +85,7 @@ lib/
 │   ├── class_performance_screen.dart # Teacher: health score, per-student trend, Warning Letter
 │   ├── take_attendance_screen.dart   # Teacher: mark Present/Absent per subject/date
 │   ├── attendance_overview_screen.dart # Student: attendance rate, subject filter, history
-│   ├── child_overview_screen.dart    # Parent: read-only attendance + performance for linked child
+│   ├── child_overview_screen.dart    # Parent: read-only attendance + performance, child picker if 2+ linked
 │   ├── parent_warning_letters_screen.dart # Parent: warning letters for their child, mark as read
 │   ├── admin_reports_screen.dart     # Admin: system-wide stats (count aggregation queries)
 │   └── settings_screen.dart          # All roles: profile, password, push toggle, sound, leave dates (Teacher), logout, delete account
@@ -240,6 +241,17 @@ The first-ever deploy of 2nd-gen Cloud Functions on a project can fail once with
 
 **Web Push VAPID key:** already generated and configured in `_webVapidKey` (`lib/utils/push_notifications.dart`) — that key can only be generated by a human in Firebase Console (Project Settings → Cloud Messaging → Web configuration → "Generate key pair"), no CLI equivalent exists, so keep this in mind if the project ever needs a new one.
 
+**MFA email OTP setup (✅ already done for this project's `tuturedu.support@gmail.com` sender — steps below for reference/rotating the App Password later):**
+
+1. Turn on 2-Step Verification on the Gmail account you want to send OTP emails from.
+2. Generate an App Password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+3. Set the two secrets (run these yourself, in your own terminal — never paste the password anywhere else):
+   ```bash
+   firebase functions:secrets:set MFA_SMTP_USER
+   firebase functions:secrets:set MFA_SMTP_PASS
+   ```
+4. Deploy as usual: `firebase deploy --only functions`
+
 ## Build (Android)
 
 ```bash
@@ -254,7 +266,7 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Sign up (self registration)
 - [x] Login & role-based routing
 - [x] Session persistence (AuthGate) — no repeated login on app restart (Web excluded on purpose)
-- [x] About page (Pusat Tuisyen Arena Matriks) — reachable pre-login
+- [x] "About Pusat Tuisyen Arena Matriks" (story, What We Offer, Operating Hours) continues inline on the Welcome screen below the Log In/Sign Up buttons — no separate About page/route
 - [x] Firebase Authentication + Firestore integration
 - [x] Real-time chat with read receipts & unread badges
 - [x] Quick reply chips
@@ -278,6 +290,9 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Notification Sound (3 options, foreground on every platform, background/system on Android)
 - [x] Android release APK (own launcher icon; package name/signing still placeholders, fine for sideload/demo, not Play-Store-ready)
 - [x] URL Phishing Detection in chat (heuristic, client-side — see BLUEPRINT.md section 11)
+- [x] Delete Message (soft-delete — sender within 15 minutes, or Admin any time — see BLUEPRINT.md section 5.16)
+- [x] Parent Module supports 2+ children per parent (`childUids` array, child picker in Child Overview, "Manage Children" in Admin — see BLUEPRINT.md section 5.9)
+- [x] MFA — Email OTP mandatory for every role on every fresh sign-in (see BLUEPRINT.md section 5.17), branded HTML email, confirmed working end-to-end
 
 ## Author
 

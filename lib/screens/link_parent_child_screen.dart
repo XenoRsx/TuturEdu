@@ -1,10 +1,12 @@
 // lib/screens/link_parent_child_screen.dart
 //
 // Admin screen: link a Parent account to a Student account (see
-// BLUEPRINT.md 5.9). Writes both sides of the relationship in one batch -
-// users/{parentUid}.childUid and users/{studentUid}.parentUid - so the two
-// fields never go out of sync. Reachable from manage_users_screen.dart's
-// "Link Child" action on a Parent row.
+// BLUEPRINT.md 5.9). A parent can have more than one child linked -
+// users/{parentUid}.childUids is an array (arrayUnion here, so linking a
+// 2nd/3rd child doesn't clobber the earlier ones) - while
+// users/{studentUid}.parentUid stays a single value, since each student
+// has exactly one linked parent in this app. Reachable from
+// manage_users_screen.dart's "Link Child" action on a Parent row.
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -58,7 +60,9 @@ class _LinkParentChildScreenState extends State<LinkParentChildScreen> {
       final batch = FirebaseFirestore.instance.batch();
       batch.update(
         FirebaseFirestore.instance.collection('users').doc(widget.parentUid),
-        {'childUid': studentUid},
+        {
+          'childUids': FieldValue.arrayUnion([studentUid]),
+        },
       );
       batch.update(
         FirebaseFirestore.instance.collection('users').doc(studentUid),
