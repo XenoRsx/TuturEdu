@@ -70,8 +70,21 @@ service cloud.firestore {
                        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
                        request.resource.data.senderId == request.auth.uid;
 
-        // Elak sesiapa edit/delete mesej lepas dihantar
-        allow update, delete: if false;
+        // Soft-delete sahaja (rujuk BLUEPRINT.md 5.16): sender boleh padam
+        // mesej DIA SENDIRI dalam masa 15 minit selepas hantar, ATAU Admin
+        // boleh padam mana-mana mesej bila-bila (moderation). Update
+        // dihadkan KETAT ke field `deleted`/`deletedAt` sahaja - tiada
+        // laluan lain untuk ubah kandungan mesej lepas dihantar.
+        allow update: if request.auth != null &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'deletedAt']) &&
+                       request.resource.data.deleted == true &&
+                       (
+                         (resource.data.senderId == request.auth.uid &&
+                          request.time < resource.data.timestamp + duration.value(15, 'm')) ||
+                         isAdmin()
+                       );
+
+        allow delete: if false;
       }
 
       // Sub-collection: scheduledReplies (Overtime Mode - "Schedule Reply")
@@ -196,7 +209,9 @@ service cloud.firestore {
     // Collection: attendance (Attendance Overview, rujuk BLUEPRINT.md Seksyen 5.8)
     // studentUid ialah document ID parent, records ialah sub-collection.
     // - Boleh dibaca oleh student berkaitan, teacher yang mengajar subjek rekod
-    //   tu, atau parent student tu (users/{uid}.childUid == studentUid)
+    //   tu, atau parent student tu (studentUid in users/{uid}.childUids -
+    //   array, sebab satu parent boleh ada 2+ anak berdaftar, rujuk
+    //   BLUEPRINT.md Seksyen 5.9)
     // - `resource == null` di-check dulu (guna short-circuit ||) sebab teacher
     //   perlu get() rekod yang MUNGKIN belum wujud lagi (cek dah tandakan ke
     //   belum untuk tarikh tu) - tanpa ni, get() ke dokumen yang tak wujud
@@ -209,9 +224,20 @@ service cloud.firestore {
                     request.auth.uid == studentUid ||
                     teachesSubject(resource.data.subject) ||
                     (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.childUid == studentUid));
+                     studentUid in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('childUids', [])));
       allow create, update: if teachesSubject(request.resource.data.subject);
       allow delete: if false;
+    }
+
+    // Collection: mfaCodes (email OTP second factor, rujuk BLUEPRINT.md
+    // Seksyen 5.17). Hashed code + expiry + attempt count sahaja - client
+    // TIDAK PERNAH baca/tulis terus. Hanya DUA Cloud Function
+    // (sendMfaCode/verifyMfaCode di functions/index.js) yang sentuh
+    // collection ni, guna Admin SDK yang bypass rules sepenuhnya - jadi
+    // deny eksplisit ni sekadar dokumentasi (default Firestore pun dah
+    // deny access yang tak dibenarkan secara eksplisit), bukan keperluan.
+    match /mfaCodes/{uid} {
+      allow read, write: if false;
     }
   }
 }

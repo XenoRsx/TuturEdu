@@ -12,8 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart' show kBrandBlue, kBrandGreen, kInkDark, kInkMuted;
+import '../utils/auth_error_dialog.dart';
 import '../utils/push_notifications.dart';
 import 'login_screen.dart';
+import 'mfa_verification_screen.dart';
 import 'student_dashboard.dart';
 import 'teacher_dashboard.dart';
 import 'parent_dashboard.dart';
@@ -92,29 +94,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
           destination = const StudentDashboard();
       }
 
+      // MFA (email OTP) is mandatory for every role, including a brand
+      // new signup - see BLUEPRINT.md 5.17. MfaVerificationScreen does the
+      // actual pushAndRemoveUntil to `destination` once the code is
+      // verified.
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => destination),
+        MaterialPageRoute(
+          builder: (_) => MfaVerificationScreen(destination: destination),
+        ),
         (route) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'email-already-in-use':
-          message = 'This email is already registered. Please log in instead.';
-          break;
-        case 'invalid-email':
-          message = 'Invalid email format.';
-          break;
-        case 'weak-password':
-          message = 'Password is too weak.';
-          break;
-        default:
-          message = 'Error: ${e.message}';
-      }
-      _showSnack(message);
     } catch (e) {
-      _showSnack('Error: ${e.toString()}');
+      if (mounted) {
+        showAuthErrorDialog(context, title: 'Sign Up Failed', error: e);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

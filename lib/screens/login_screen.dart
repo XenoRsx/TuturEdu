@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
+import '../utils/auth_error_dialog.dart';
 import '../utils/push_notifications.dart';
-import 'about_arena_matriks_screen.dart';
+import 'mfa_verification_screen.dart';
 import 'teacher_dashboard.dart';
 import 'student_dashboard.dart';
 import 'parent_dashboard.dart';
@@ -79,18 +80,23 @@ class _LoginScreenState extends State<LoginScreen> {
             throw 'Unrecognized role in the system.';
         }
 
+        // MFA (email OTP) is mandatory for every role - see BLUEPRINT.md
+        // 5.17. MfaVerificationScreen does the actual pushAndRemoveUntil
+        // to `destination` once the code is verified.
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => destination),
+          MaterialPageRoute(
+            builder: (_) => MfaVerificationScreen(destination: destination),
+          ),
           (route) => false,
         );
       } else {
         throw 'User data not found in the database. Make sure the account is registered in Firestore.';
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      if (mounted) {
+        showAuthErrorDialog(context, title: 'Login Failed', error: e);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -266,30 +272,6 @@ class _LoginScreenState extends State<LoginScreen> {
           'hours.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 12.5, color: kInkMuted, height: 1.4),
-        ),
-        const SizedBox(height: 8),
-        TextButton(
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const AboutArenaMatriksScreen(),
-              ),
-            );
-          },
-          child: const Text(
-            'Learn more about us',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: kBrandBlue,
-            ),
-          ),
         ),
       ],
     );

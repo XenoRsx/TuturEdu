@@ -18,10 +18,22 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /chats/{chatId}/attachments/{fileName} {
-      // Read: a plain GET, not resumable - the firestore.get() cross-
-      // service check below resolves reliably here.
-      allow read: if request.auth != null &&
-                   request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participants;
+      // Read: originally cross-checked firestore.get(...).data.participants
+      // here too, same as write used to. Confirmed by testing (2026-09-07)
+      // that this firestore.get() cross-service read is NOT reliable even
+      // for a plain GET - specifically right after a resumable upload
+      // session closes, getDownloadURL() calling into this rule can 403
+      // even for a genuine participant, and it's intermittent (retrying
+      // client-side helped sometimes but not reliably). Relaxed to any
+      // authenticated user for the same reason write was: the path segment
+      // is a random Firestore-generated message ID (not guessable), and
+      // getDownloadURL()'s whole job is to hand back a URL carrying a
+      // download token that becomes forwardable/cacheable by anyone who
+      // receives it regardless of this rule - so this rule was mainly
+      // stopping outsiders from minting that token themselves, not
+      // protecting content that's already exposed once shared. Acceptable
+      // trade-off for this project's scope, same as the write rule below.
+      allow read: if request.auth != null;
 
       // Write: confirmed by testing that Web's resumable-upload protocol
       // evaluates this rule during the session-start request, where the

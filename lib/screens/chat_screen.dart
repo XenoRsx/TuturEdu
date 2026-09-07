@@ -78,6 +78,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isTeacher = false;
   bool _overtimeActive = false; // teacher tapped "Reply Now (Overtime Mode)"
 
+  // ----- Delete Message state (see BLUEPRINT.md 5.16) -----
+  bool _isAdmin = false;
+  static const _deleteWindow = Duration(minutes: 15);
+
   // ----- On-Duty/Off-Duty state (see file header + BLUEPRINT.md 5.10) -----
   String? _relevantTeacherUid;
   String? _groupAdminUid;
@@ -222,7 +226,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final role = doc.data()?['role'] ?? '';
     final isTeacher = role == 'Teacher';
     if (mounted) {
-      setState(() => _isTeacher = isTeacher);
+      setState(() {
+        _isTeacher = isTeacher;
+        _isAdmin = role == 'Admin';
+      });
     }
 
     // Group chats resolve their teacher (groupAdmin) from the chat-doc
@@ -366,33 +373,79 @@ class _ChatScreenState extends State<ChatScreen> {
         'chats/${widget.chatId}/attachments/${messageRef.id}_${picked.name}',
       );
 
-      final uploadTask = storageRef.putData(
-        bytes,
-        SettableMetadata(contentType: _contentTypeFor(picked.name)),
-      );
-
-      progressSub = uploadTask.snapshotEvents.listen((snapshot) {
-        if (!mounted || snapshot.totalBytes <= 0) return;
-        setState(
-          () =>
-              _uploadProgress = snapshot.bytesTransferred / snapshot.totalBytes,
+      // Web's resumable-upload protocol occasionally fires its first
+      // request with a stale/expiring ID token, failing with `unauthorized`
+      // even though the user genuinely is signed in (see CLAUDE.md's
+      // storage.rules notes - confirmed via DevTools: the preflight
+      // succeeds but the actual XHR comes back 403). A plain delay-and-
+      // retry reuses the SAME cached token and can keep failing, so force
+      // a real token refresh (getIdToken(true)) before each retry - that's
+      // what actually clears the stale-token condition. Not retried for
+      // other error codes; those are real failures.
+      const maxUploadAttempts = 3;
+      for (var attempt = 1; attempt <= maxUploadAttempts; attempt++) {
+        if (attempt > 1) {
+          await currentUser.getIdToken(true);
+        }
+        final uploadTask = storageRef.putData(
+          bytes,
+          SettableMetadata(contentType: _contentTypeFor(picked.name)),
         );
-      });
 
-      // Storage calls can hang indefinitely (rather than fail fast) when the
-      // bucket isn't reachable - e.g. Storage not yet enabled for this
-      // Firebase project. Time out instead of spinning forever.
-      await uploadTask.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          uploadTask.cancel();
-          throw TimeoutException(
-            'Upload timed out. Firebase Storage may not be enabled for this '
-            'project yet - check the Firebase Console.',
+        progressSub = uploadTask.snapshotEvents.listen((snapshot) {
+          if (!mounted || snapshot.totalBytes <= 0) return;
+          setState(
+            () => _uploadProgress =
+                snapshot.bytesTransferred / snapshot.totalBytes,
           );
-        },
-      );
-      final downloadUrl = await storageRef.getDownloadURL();
+        });
+
+        try {
+          // Storage calls can hang indefinitely (rather than fail fast)
+          // when the bucket isn't reachable - e.g. Storage not yet
+          // enabled for this Firebase project. Time out instead of
+          // spinning forever.
+          await uploadTask.timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              uploadTask.cancel();
+              throw TimeoutException(
+                'Upload timed out. Firebase Storage may not be enabled '
+                'for this project yet - check the Firebase Console.',
+              );
+            },
+          );
+          break;
+        } on FirebaseException catch (e) {
+          if (e.code != 'unauthorized' || attempt == maxUploadAttempts) {
+            rethrow;
+          }
+          await progressSub.cancel();
+          await Future.delayed(const Duration(milliseconds: 700));
+        }
+      }
+      // getDownloadURL() is a plain (non-resumable) GET, but it's still
+      // subject to this rule's allow-read clause, which cross-checks the
+      // chat's Firestore participants - and that firestore.get() lookup can
+      // fail to resolve in time immediately after a resumable upload
+      // session finishes, for the same class of reason documented on
+      // storage.rules' write clause. Give it the same refresh-and-retry
+      // treatment rather than assuming a plain GET is immune.
+      late final String downloadUrl;
+      for (var attempt = 1; attempt <= maxUploadAttempts; attempt++) {
+        if (attempt > 1) {
+          await currentUser.getIdToken(true);
+          await Future.delayed(const Duration(milliseconds: 700));
+        }
+        try {
+          downloadUrl = await storageRef.getDownloadURL();
+          break;
+        } on FirebaseException catch (e) {
+          if (e.code != 'unauthorized' || attempt == maxUploadAttempts) {
+            rethrow;
+          }
+        }
+      }
 
       final isOvertimeReply = !officeHourNow && _overtimeActive;
       final attachmentTypeStr =
@@ -439,9 +492,25 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _showAttachmentError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Attachment Error'),
+          ],
+        ),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   String? _contentTypeFor(String fileName) {
@@ -614,6 +683,54 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     if (confirmed == true) await _launchChatLink(rawUrl);
+  }
+
+  // ----- Delete Message (soft-delete, see BLUEPRINT.md 5.16) -----
+  // The sender can delete their own message within _deleteWindow of sending
+  // it; an Admin can delete any message, any time (moderation). Messages
+  // are otherwise create-only (firestore.rules) - this is the one narrow
+  // exception, restricted server-side to flipping `deleted`/`deletedAt`
+  // only, never the original content.
+  bool _canDeleteMessage(Map<String, dynamic> data, bool isMe) {
+    if (data['deleted'] == true) return false;
+    if (_isAdmin) return true;
+    if (!isMe) return false;
+    final rawTimestamp = data['timestamp'];
+    if (rawTimestamp is! Timestamp) return false;
+    return DateTime.now().difference(rawTimestamp.toDate()) < _deleteWindow;
+  }
+
+  Future<void> _confirmDeleteMessage(String messageId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Message'),
+        content: const Text(
+          'Delete this message for everyone in the chat? This cannot be '
+          'undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await FirebaseFirestore.instance
+        .collection('chats')
+        .doc(widget.chatId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'deleted': true, 'deletedAt': FieldValue.serverTimestamp()});
   }
 
   // ----- Overtime Mode: "Reply Now (Overtime Mode)" -----
@@ -952,8 +1069,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.all(12),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    final data = messages[index].data() as Map<String, dynamic>;
+                    final messageDoc = messages[index];
+                    final data = messageDoc.data() as Map<String, dynamic>;
                     final isMe = data['senderId'] == currentUserUid;
+                    final isDeleted = data['deleted'] == true;
                     final text = data['text'] ?? '';
                     final isOvertimeReply = data['isOvertimeReply'] == true;
                     final isScheduledReply = data['isScheduledReply'] == true;
@@ -968,100 +1087,117 @@ class _ChatScreenState extends State<ChatScreen> {
                       alignment: isMe
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isMe ? Colors.blue : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.7,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.isGroup && !isMe && senderId.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 3),
-                                child: FutureBuilder<String>(
-                                  future: _getSenderName(senderId),
-                                  builder: (context, senderSnapshot) => Text(
-                                    senderSnapshot.data ?? '...',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade700,
+                      child: GestureDetector(
+                        onLongPress: _canDeleteMessage(data, isMe)
+                            ? () => _confirmDeleteMessage(messageDoc.id)
+                            : null,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isMe ? Colors.blue : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.7,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.isGroup &&
+                                  !isMe &&
+                                  senderId.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 3),
+                                  child: FutureBuilder<String>(
+                                    future: _getSenderName(senderId),
+                                    builder: (context, senderSnapshot) => Text(
+                                      senderSnapshot.data ?? '...',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue.shade700,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            if (isOvertimeReply || isScheduledReply)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isOvertimeReply
-                                          ? Icons.bolt
-                                          : Icons.schedule_send,
-                                      size: 12,
-                                      color: isMe
-                                          ? Colors.white70
-                                          : Colors.orange.shade700,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isOvertimeReply
-                                          ? 'Overtime'
-                                          : 'Scheduled',
-                                      style: TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w600,
+                              if (isOvertimeReply || isScheduledReply)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isOvertimeReply
+                                            ? Icons.bolt
+                                            : Icons.schedule_send,
+                                        size: 12,
                                         color: isMe
                                             ? Colors.white70
                                             : Colors.orange.shade700,
                                       ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        isOvertimeReply
+                                            ? 'Overtime'
+                                            : 'Scheduled',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: isMe
+                                              ? Colors.white70
+                                              : Colors.orange.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (isDeleted)
+                                Text(
+                                  'This message was deleted',
+                                  style: TextStyle(
+                                    fontStyle: FontStyle.italic,
+                                    color: isMe
+                                        ? Colors.white70
+                                        : Colors.black54,
+                                  ),
+                                )
+                              else if (attachmentUrl != null)
+                                _buildAttachmentContent(
+                                  attachmentUrl,
+                                  attachmentType,
+                                  attachmentName,
+                                  isMe,
+                                )
+                              else
+                                _buildMessageText(text, isMe),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _formatTime(rawTimestamp),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: isMe
+                                            ? Colors.white70
+                                            : Colors.black45,
+                                      ),
                                     ),
+                                    if (isMe) ...[
+                                      const SizedBox(width: 4),
+                                      _buildTick(rawTimestamp),
+                                    ],
                                   ],
                                 ),
                               ),
-                            if (attachmentUrl != null)
-                              _buildAttachmentContent(
-                                attachmentUrl,
-                                attachmentType,
-                                attachmentName,
-                                isMe,
-                              )
-                            else
-                              _buildMessageText(text, isMe),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _formatTime(rawTimestamp),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: isMe
-                                          ? Colors.white70
-                                          : Colors.black45,
-                                    ),
-                                  ),
-                                  if (isMe) ...[
-                                    const SizedBox(width: 4),
-                                    _buildTick(rawTimestamp),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     );
