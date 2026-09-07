@@ -977,7 +977,6 @@ lib/
 ├── main.dart                            // home: AuthGate; ThemeData/design system dikongsi
 ├── firebase_options.dart
 ├── models/
-│   ├── user_model.dart
 │   └── message_model.dart          (cadangan — belum wujud)
 ├── screens/
 │   ├── auth_gate.dart                   // ✅ root widget - check session sedia ada (rujuk 5.1) sebelum papar welcome_screen.dart
@@ -1029,7 +1028,7 @@ lib/
 assets/
 ├── images/
 │   ├── arena_matrix_logo.png
-│   └── tuturedu_logo.png               // ✅ didaftar dalam pubspec.yaml
+│   └── tuturedu_logo_trimmed.png       // ✅ didaftar dalam pubspec.yaml, dipakai dalam welcome_screen.dart
 └── sounds/                             // ✅ 3 fail bunyi notification, rujuk Seksyen 5.15
     ├── option1_pop.mp3
     ├── option2_marimba.mp3             // = default (5.15)
