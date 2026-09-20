@@ -8,10 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/quiz_theme.dart';
-import '../widgets/app_card.dart';
-import '../widgets/empty_state.dart';
 import 'create_quiz_screen.dart';
 import 'host_quiz_session_screen.dart';
+import 'quiz_results_screen.dart';
 
 class QuizListScreen extends StatelessWidget {
   const QuizListScreen({super.key});
@@ -139,51 +138,90 @@ class QuizListScreen extends StatelessWidget {
         icon: const Icon(Icons.add),
         label: const Text('New Quiz'),
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('quizzes')
-              .where('createdBy', isEqualTo: currentUser.uid)
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
-            }
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
+      // Forced light Theme - see create_quiz_screen.dart's build() for why:
+      // this page's fixed light QuizTheme.pageGradient must never follow
+      // the app's Light/Dark/System setting, and this is cheap insurance
+      // against any future default-colored widget added here.
+      body: Theme(
+        data: ThemeData.light(useMaterial3: true),
+        child: Container(
+          decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('quizzes')
+                .where('createdBy', isEqualTo: currentUser.uid)
+                .orderBy('createdAt', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            final quizzes = snapshot.data!.docs;
+              final quizzes = snapshot.data!.docs;
 
-            if (quizzes.isEmpty) {
-              return const EmptyState(
-                icon: Icons.quiz_outlined,
-                title: 'No quizzes yet',
-                subtitle: 'Tap "New Quiz" to create one.',
-              );
-            }
+              if (quizzes.isEmpty) {
+                // Fixed (not theme-derived) colors deliberately - this page
+                // always sits on the light QuizTheme.pageGradient regardless
+                // of the app's Light/Dark/System setting (see CLAUDE.md).
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 84,
+                        height: 84,
+                        decoration: BoxDecoration(
+                          color: QuizTheme.primary.withValues(alpha: 0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.quiz_outlined,
+                          size: 40,
+                          color: QuizTheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No quizzes yet. Tap "New Quiz" to create one.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                );
+              }
 
-            return ListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
-              itemCount: quizzes.length,
-              itemBuilder: (context, index) {
-                final doc = quizzes[index];
-                final data = doc.data() as Map<String, dynamic>;
-                final title = data['title'] ?? 'Untitled Quiz';
-                final subject = data['subjectLevel'] ?? '';
-                final questionCount = data['questionCount'] ?? 0;
-                final mode = data['mode'] ?? 'live';
-                final canHost = mode == 'live' || mode == 'both';
-                final color =
-                    QuizTheme.optionColors[title.hashCode.abs() %
-                        QuizTheme.optionColors.length];
+              return ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 90),
+                itemCount: quizzes.length,
+                itemBuilder: (context, index) {
+                  final doc = quizzes[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = data['title'] ?? 'Untitled Quiz';
+                  final subject = data['subjectLevel'] ?? '';
+                  final questionCount = data['questionCount'] ?? 0;
+                  final mode = data['mode'] ?? 'live';
+                  final canHost = mode == 'live' || mode == 'both';
+                  final hasSelfPaced = mode == 'self_paced' || mode == 'both';
+                  final color =
+                      QuizTheme.optionColors[title.hashCode.abs() %
+                          QuizTheme.optionColors.length];
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: AppCard(
-                    padding: EdgeInsets.zero,
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: QuizTheme.primary.withValues(alpha: 0.08),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -206,14 +244,36 @@ class QuizListScreen extends StatelessWidget {
                       ),
                       title: Text(
                         title,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
                       ),
                       subtitle: Text(
                         '$subject · $questionCount question(s) · ${_modeLabel(mode)}',
+                        style: const TextStyle(color: Colors.black54),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (hasSelfPaced)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.leaderboard_outlined,
+                                color: QuizTheme.primary,
+                              ),
+                              tooltip: 'View Results',
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => QuizResultsScreen(
+                                    quizId: doc.id,
+                                    quizTitle: title,
+                                    subjectLevel: subject,
+                                  ),
+                                ),
+                              ),
+                            ),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
@@ -247,11 +307,11 @@ class QuizListScreen extends StatelessWidget {
                         _hostSession(context, doc.id, title);
                       },
                     ),
-                  ),
-                );
-              },
-            );
-          },
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );

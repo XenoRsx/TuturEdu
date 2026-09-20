@@ -174,9 +174,25 @@ service cloud.firestore {
     // lain diperlukan dalam rule ni.
     // - Hanya student pemilik attempt tu boleh baca/cipta/kemaskini, ATAU Admin
     //   boleh baca (perlu untuk count() aggregation dalam admin_reports_screen.dart)
+    // - `resource == null` di-check dulu (guna short-circuit || - pattern sama
+    //   macam attendance rule di atas) sebab attempt_quiz_screen.dart's _load()
+    //   MEMANG get() dokumen ni SEBELUM attempt pertama wujud (cek "student ni
+    //   dah attempt ke belum") - tanpa ni, get() ke dokumen yang tak wujud lagi
+    //   dinafikan sebab `resource.data.studentUid` invalid bila resource null,
+    //   throw PERMISSION_DENIED yang attempt_quiz_screen.dart tak catch -
+    //   punca bug sebenar "loading non-stop" bila student cuba buka quiz
+    //   Self-Paced buat kali pertama.
+    // - Teacher yang cipta quiz tu (createdBy) turut boleh baca semua attempt
+    //   untuk quiz tu (perlu untuk quiz_results_screen.dart - Teacher tengok
+    //   markah semua student) - get() ke quizzes/{quizId} guna quizId yang
+    //   disimpan terus pada setiap attempt doc.
     match /quizAttempts/{attemptId} {
       allow read: if request.auth != null &&
-                   (request.auth.uid == resource.data.studentUid || isAdmin());
+                   (resource == null ||
+                    request.auth.uid == resource.data.studentUid ||
+                    isAdmin() ||
+                    (exists(/databases/$(database)/documents/quizzes/$(resource.data.quizId)) &&
+                     get(/databases/$(database)/documents/quizzes/$(resource.data.quizId)).data.createdBy == request.auth.uid));
       allow create: if request.auth != null &&
                      request.auth.uid == request.resource.data.studentUid;
       allow update: if request.auth != null &&

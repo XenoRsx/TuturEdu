@@ -25,7 +25,7 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - Overtime Mode & Schedule Message — outside business hours, teachers can reply immediately ("Reply Now") or schedule a reply to auto-send once business hours resume; students/parents can schedule a message the same way (no "Reply Now" bypass for them, since that's specifically a teacher choosing to break their own hours)
 - On-Duty / Off-Duty Toggle — a teacher can manually go Off-Duty (e.g. sudden meeting, sick leave) to lock their chats even during scheduled office hours, live-synced to anyone with the chat open
 - Interactive Quiz — Live Session — Kahoot/Wayground-style: teacher creates a multiple-choice quiz and hosts a live session with a 6-digit join code; students join in real time, answer against a synced countdown timer, and see a final podium leaderboard
-- Interactive Quiz — Self-Paced — same quiz questions, attempted on the student's own time (no timer, no host); one attempt per student per quiz, with an instant score + answer review afterward
+- Interactive Quiz — Self-Paced — same quiz questions, attempted on the student's own time (no timer, no host), with an instant score + answer review afterward; teachers can optionally allow retakes (set a max attempts) and/or a due date, and view every enrolled student's result (completed/not attempted, score, attempts used) in one screen
 - Class Performance Overview — teacher picks a subject, sees a class health score and a Safe/At-Risk/Barred breakdown, grades each student (0–100), and gets an auto-computed trend (Steady/Dropping/Critical) based on the change since their last grade
 - Warning Letter — teacher can send a warning letter to a student's linked parent when their trend turns Critical, with a per-student sending history
 - Attendance — teacher takes attendance per subject/date (Present/Absent, "Mark All" shortcuts); student sees their attendance rate, a Safe/Low breakdown, and a low-attendance warning below 75%
@@ -282,7 +282,7 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Attendance (teacher takes attendance, student sees rate + history)
 - [x] Parent module (Admin links Parent↔Student, parent chat dashboard, Child Overview, Warning Letters)
 - [x] On-Duty/Off-Duty manual toggle
-- [x] Interactive Quiz — Self-Paced (homework mode)
+- [x] Interactive Quiz — Self-Paced (homework mode), with retake/due date settings and a Teacher results screen
 - [x] Admin Reports (real system-wide stats)
 - [x] Push notifications (Cloud Functions deployed and live, including Web — VAPID key configured)
 - [x] Settings (Edit Profile, Change Password, push toggle, notification sound, Log Out, self-service Delete Account, Teacher Leave/Holiday dates)

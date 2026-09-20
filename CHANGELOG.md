@@ -8,8 +8,27 @@ was committed.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Self-Paced Quiz stuck loading forever on first open** — `quizAttempts`'
+  read rule checked `resource.data.studentUid` without guarding against
+  `resource` being `null` on the very first read (before any attempt
+  exists), so Firestore denied it and `attempt_quiz_screen.dart` had no
+  error handling to surface that — just an infinite spinner. Fixed with the
+  same `resource == null ||` guard already used for `attendance`, plus
+  proper error handling in `_load()` so any future failure shows a message
+  instead of spinning forever.
+
 ### Added
 
+- **Self-Paced Quiz: retake, due date, and Teacher results** — teachers can
+  now optionally allow retakes (choose a max attempt count) and/or set a due
+  date when creating a Self-Paced quiz. Students see a "Retake Quiz" button
+  after completing one (while attempts remain and before the due date), and
+  are blocked from starting a quiz at all past its due date if they haven't
+  attempted it. A new `quiz_results_screen.dart` (reachable from "My
+  Quizzes") lets a teacher see every enrolled student's result — completed
+  score/percentage/attempts or "not attempted yet" — for one quiz.
 - **Claymorphism visual style** — every raised surface across the shared
   widget layer (`AppCard`, `IconTile`, `StatTile`, `MenuRow`, the received
   side of `MessageBubble`) now uses a soft dual-direction shadow (`main.dart`'s

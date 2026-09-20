@@ -12,8 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/quiz_theme.dart';
-import '../widgets/app_card.dart';
-import '../widgets/empty_state.dart';
 import 'attempt_quiz_screen.dart';
 
 class SelfPacedQuizListScreen extends StatefulWidget {
@@ -64,64 +62,114 @@ class _SelfPacedQuizListScreenState extends State<SelfPacedQuizListScreen> {
         title: const Text('Self-Paced Quizzes'),
         backgroundColor: QuizTheme.primary,
       ),
-      body: Container(
-        decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
-        child: _loadingSubjects
-            ? const Center(child: CircularProgressIndicator())
-            : StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('quizzes')
-                    .where('mode', whereIn: ['self_paced', 'both'])
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+      // Forced light Theme - see create_quiz_screen.dart's build() for why:
+      // this page's fixed light QuizTheme.pageGradient must never follow
+      // the app's Light/Dark/System setting, and this is cheap insurance
+      // against any future default-colored widget added here.
+      body: Theme(
+        data: ThemeData.light(useMaterial3: true),
+        child: Container(
+          decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
+          child: _loadingSubjects
+              ? const Center(child: CircularProgressIndicator())
+              : StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('quizzes')
+                      .where('mode', whereIn: ['self_paced', 'both'])
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                  final quizzes =
-                      snapshot.data!.docs.where((doc) {
-                        final subject =
-                            (doc.data()
-                                as Map<String, dynamic>)['subjectLevel'];
-                        return _mySubjects.contains(subject);
-                      }).toList()..sort((a, b) {
-                        final titleA =
-                            ((a.data() as Map<String, dynamic>)['title'] ?? '')
-                                .toString();
-                        final titleB =
-                            ((b.data() as Map<String, dynamic>)['title'] ?? '')
-                                .toString();
-                        return titleA.compareTo(titleB);
-                      });
+                    final quizzes =
+                        snapshot.data!.docs.where((doc) {
+                          final subject =
+                              (doc.data()
+                                  as Map<String, dynamic>)['subjectLevel'];
+                          return _mySubjects.contains(subject);
+                        }).toList()..sort((a, b) {
+                          final titleA =
+                              ((a.data() as Map<String, dynamic>)['title'] ??
+                                      '')
+                                  .toString();
+                          final titleB =
+                              ((b.data() as Map<String, dynamic>)['title'] ??
+                                      '')
+                                  .toString();
+                          return titleA.compareTo(titleB);
+                        });
 
-                  if (quizzes.isEmpty) {
-                    return const EmptyState(
-                      icon: Icons.assignment_outlined,
-                      title: 'No self-paced quizzes available',
-                      subtitle: 'Nothing for your subjects yet.',
-                    );
-                  }
+                    if (quizzes.isEmpty) {
+                      // Fixed (not theme-derived) colors deliberately - this
+                      // page always sits on the light QuizTheme.pageGradient
+                      // regardless of the app's Light/Dark/System setting (see
+                      // CLAUDE.md), so text here must stay dark-on-light no
+                      // matter what, unlike most other screens.
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 84,
+                                height: 84,
+                                decoration: BoxDecoration(
+                                  color: QuizTheme.primary.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.assignment_outlined,
+                                  size: 40,
+                                  color: QuizTheme.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No self-paced quizzes available for your subjects yet.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: quizzes.length,
-                    itemBuilder: (context, index) {
-                      final doc = quizzes[index];
-                      final data = doc.data() as Map<String, dynamic>;
-                      final title = data['title'] ?? 'Untitled Quiz';
-                      final subject = data['subjectLevel'] ?? '';
-                      final questionCount = data['questionCount'] ?? 0;
-                      final color =
-                          QuizTheme.optionColors[title.hashCode.abs() %
-                              QuizTheme.optionColors.length];
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: quizzes.length,
+                      itemBuilder: (context, index) {
+                        final doc = quizzes[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final title = data['title'] ?? 'Untitled Quiz';
+                        final subject = data['subjectLevel'] ?? '';
+                        final questionCount = data['questionCount'] ?? 0;
+                        final color =
+                            QuizTheme.optionColors[title.hashCode.abs() %
+                                QuizTheme.optionColors.length];
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: AppCard(
-                          padding: EdgeInsets.zero,
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: QuizTheme.primary.withValues(
+                                  alpha: 0.08,
+                                ),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -146,10 +194,12 @@ class _SelfPacedQuizListScreenState extends State<SelfPacedQuizListScreen> {
                               title,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
+                                color: Colors.black87,
                               ),
                             ),
                             subtitle: Text(
                               '$subject · $questionCount question(s)',
+                              style: const TextStyle(color: Colors.black54),
                             ),
                             trailing: FutureBuilder<DocumentSnapshot>(
                               future: FirebaseFirestore.instance
@@ -202,12 +252,12 @@ class _SelfPacedQuizListScreenState extends State<SelfPacedQuizListScreen> {
                               );
                             },
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+                        );
+                      },
+                    );
+                  },
+                ),
+        ),
       ),
     );
   }

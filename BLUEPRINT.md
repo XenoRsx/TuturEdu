@@ -1035,14 +1035,15 @@ lib/
 │   ├── manage_users_screen.dart          // ✅ Admin: CRUD users + Edit Subjects + Link/Unlink Child, EN
 │   ├── link_parent_child_screen.dart     // ✅ Admin: pautkan akaun Parent ↔ Student
 │   ├── manage_subjects_screen.dart       // ✅ Admin: CRUD subjectCatalog, EN
-│   ├── create_quiz_screen.dart          // ✅ Teacher: cipta quiz (soalan 4 opsyen, pilih mod)
-│   ├── quiz_list_screen.dart            // ✅ Teacher: "My Quizzes", mula host session (Live/Both sahaja)
+│   ├── create_quiz_screen.dart          // ✅ Teacher: cipta quiz (soalan 4 opsyen, pilih mod, retake + due date untuk Self-Paced, rujuk 9.6a)
+│   ├── quiz_list_screen.dart            // ✅ Teacher: "My Quizzes", mula host session (Live/Both sahaja), ikon "View Results" (Self-Paced)
+│   ├── quiz_results_screen.dart         // ✅ Teacher: markah semua student (Self-Paced) untuk satu quiz, rujuk 9.6a
 │   ├── host_quiz_session_screen.dart    // ✅ Teacher: join code, waiting room, kawal soalan, leaderboard
 │   ├── join_quiz_screen.dart            // ✅ Student: masukkan join code
 │   ├── live_quiz_play_screen.dart       // ✅ Student: main quiz real-time, timer, leaderboard
 │   ├── quiz_leaderboard_view.dart       // ✅ widget leaderboard/podium dikongsi host + student
 │   ├── self_paced_quiz_list_screen.dart // ✅ Student: senarai quiz Self-Paced untuk subjek dia
-│   ├── attempt_quiz_screen.dart         // ✅ Student: jawab/review quiz Self-Paced (dwi-mod)
+│   ├── attempt_quiz_screen.dart         // ✅ Student: jawab/review quiz Self-Paced (dwi-mod), retake + due date, rujuk 9.6a
 │   ├── class_performance_screen.dart    // ✅ Teacher: health score, trend/kategori per-student, Warning Letter
 │   ├── take_attendance_screen.dart      // ✅ Teacher: tandakan Present/Absent ikut subjek+tarikh
 │   ├── attendance_overview_screen.dart  // ✅ Student: attendance rate, filter subjek, senarai rekod
@@ -1306,8 +1307,17 @@ match /quizAttempts/{attemptId} {
 - `attempt_quiz_screen.dart` (Student) — skrin **dwi-mod** dalam satu widget tree:
   - **Mod Attempt**: semua soalan dipapar sekali (bukan satu-satu), pilih jawapan (grid opsyen berwarna sama macam Live Session), butang "Submit Quiz" aktif hanya lepas semua soalan dijawab, dialog confirm sebelum hantar (tak boleh ubah lepas submit).
   - **Mod Review**: auto-aktif kalau `quizAttempts/{quizId}_{studentUid}` dah wujud dengan `status: "completed"` (check sekali dalam `_load()`, atau terus lepas submit tanpa re-fetch) - papar header markah (gradient ungu) + setiap opsyen ditanda betul/salah (border putih + check untuk jawapan betul, silang untuk pilihan salah student), tiada input lagi.
-- **Tiada retake**: sebab ID attempt deterministik, submit kali kedua akan overwrite (bukan create baru) - tapi UI tak pernah benarkan submit kali kedua sebab mod Review tak papar butang Submit langsung.
-- Firestore rules (`quizAttempts`) tak perlukan `get()` ke dokumen lain (unlike `attendance`) sebab create/update rule check terus `request.resource.data.studentUid`/`resource.data.studentUid` - tiada isu "belum wujud lagi" macam yang dijumpai untuk Class Performance/Attendance.
+- **Nota bug sebenar (dijumpai 2026-09, laporan pengguna "loading non-stop"):** `allow read` untuk `quizAttempts` asalnya check terus `resource.data.studentUid` tanpa guard `resource == null` dulu - bila `attempt_quiz_screen.dart`'s `_load()` buat `get()` ke dokumen attempt SEBELUM attempt pertama wujud (`resource == null` masa tu), rule tu ERROR (bukan return false), Firestore anggap PERMISSION_DENIED. `_load()` pulak tiada try/catch, so `_loading` terperangkap `true` selama-lamanya tanpa error dipapar - "loading non-stop" tanpa sebarang mesej. Dibetulkan dengan guard `resource == null ||` yang sama macam rule `attendance` (rujuk 5.8) + try/catch dalam `_load()` supaya kegagalan lain di masa depan papar mesej, bukan spinner selama-lamanya.
+
+### 9.6a Retake + Due Date + Teacher Results (✅ dikodkan)
+
+- `quizzes/{quizId}` ada 2 field baru: `maxAttempts` (int, default `1` = tiada retake untuk quiz lama sebelum ciri ni wujud) dan `dueDate` (Timestamp, boleh `null` = tiada tarikh akhir). Ditetapkan dalam `create_quiz_screen.dart` — suis "Allow students to retake this quiz" (bila ON, dropdown pilih 2/3/5/10 attempts) + date picker "Due Date (optional)".
+- `attempt_quiz_screen.dart` — `_load()` turut `get()` dokumen `quizzes/{quizId}` sendiri (bukan setakat `questions` subcollection) untuk `maxAttempts`/`dueDate`. Field baru pada `quizAttempts` doc: `attemptsUsed` (int, mula 0, `+1` setiap kali submit). Retake **tidak simpan sejarah** - setiap submit OVERWRITE terus dokumen attempt yang sama (ID deterministik `{quizId}_{studentUid}` kekal), hanya attempt TERKINI yang disimpan; `attemptsUsed` sekadar kira berapa kali dah overwrite.
+  - Butang "Retake Quiz" papar dalam header markah (mod Review) HANYA bila `attemptsUsed < maxAttempts` DAN `dueDate` belum lepas (`_canRetake` getter). Tekan → reset ke mod Attempt (jawapan kosong semula), TANPA re-fetch soalan.
+  - Kalau `dueDate` dah lepas DAN student tak pernah attempt langsung — skrin sekat terus (mesej "due date has passed", tiada soalan dipapar). Kalau student DAH attempt sebelum due date lepas, mod Review tetap boleh diakses (lihat markah lama), cuma butang Retake disembunyikan.
+- **`quiz_results_screen.dart`** (skrin baru, Teacher) — senarai SEMUA student yang enrolled dalam subjek quiz tu (bukan setakat yang dah attempt), tunjuk status "Completed" (markah/peratus/attempts) atau "Not attempted yet". Diakses dari `quiz_list_screen.dart` via ikon "View Results" (papar hanya untuk quiz mod `self_paced`/`both`, sebab Live Session guna leaderboard sendiri, rujuk di bawah). Query: `users` (role Student, subjects arrayContains subjectLevel) + `quizAttempts where quizId == X`, digabung client-side by `studentUid`.
+  - **Nota skop**: results ni HANYA untuk attempt Self-Paced (`quizAttempts`). Markah Live Session disimpan berasingan dalam `quizSessions/{sessionId}/participants` dan dah ada leaderboard real-time sendiri dalam `host_quiz_session_screen.dart` — tak digabung di sini.
+- **Firestore rules** (`quizAttempts`) dikemaskini supaya Teacher yang cipta quiz (bukan setakat student pemilik/Admin) boleh `read` (perlu untuk `quiz_results_screen.dart` query semua attempt untuk satu quiz) — guna `get()` ke `quizzes/{quizId}` (dari `resource.data.quizId` yang tersimpan pada setiap attempt doc) untuk sahkan `createdBy == request.auth.uid`.
 
 ---
 
@@ -1331,6 +1341,7 @@ match /quizAttempts/{attemptId} {
 - [x] Quick Reply chips
 - [x] Interactive Quiz — Live Session (rujuk Seksyen 9)
 - [x] Interactive Quiz — Self-Paced (rujuk Seksyen 9.6)
+- [x] Interactive Quiz — Self-Paced retake, due date, dan skrin markah semua student untuk Teacher (rujuk Seksyen 9.6a)
 - [x] Class Performance Overview + Warning Letter system (rujuk Seksyen 5.5)
 - [x] Attendance (Take Attendance + Attendance Overview, rujuk Seksyen 5.8)
 - [x] Modul Parent (Admin Link/Unlink Child, ParentDashboard chat, Child Overview, Warning Letters, rujuk Seksyen 5.9)

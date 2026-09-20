@@ -3,8 +3,11 @@
 // Student screen: attempt (or review) a Self-Paced quiz (see BLUEPRINT.md
 // 9.6). No timer, no host - answer every question at your own pace, then
 // submit once. quizAttempts/{quizId}_{studentUid} is a deterministic doc ID
-// (one attempt per student per quiz, no retakes) - so checking "have I
-// already done this" is a single get(), no query/index needed.
+// - one attempt doc per student per quiz, reused (overwritten) on every
+// retake, so there's still a single get() to check status, no query/index
+// needed. Retakes (see 9.6a) don't keep per-attempt history - only the
+// latest submission's score/answers are kept, `attemptsUsed` just counts
+// how many times this doc has been overwritten.
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -29,6 +32,7 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
 
   bool _loading = true;
+  String? _loadError;
   List<QueryDocumentSnapshot> _questions = [];
   final Map<String, int> _selectedAnswers = {};
 
@@ -37,6 +41,15 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
   int _finalScore = 0;
   int _totalPoints = 0;
   bool _submitting = false;
+
+  // Retake + due date (see BLUEPRINT.md 9.6a) - maxAttempts defaults to 1
+  // (no retake) for quizzes created before this feature existed.
+  int _maxAttempts = 1;
+  int _attemptsUsed = 0;
+  DateTime? _dueDate;
+
+  bool get _pastDue => _dueDate != null && DateTime.now().isAfter(_dueDate!);
+  bool get _canRetake => _attemptsUsed < _maxAttempts && !_pastDue;
 
   DocumentReference get _attemptRef => FirebaseFirestore.instance
       .collection('quizAttempts')
@@ -49,34 +62,56 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
   }
 
   Future<void> _load() async {
-    final questionsSnap = await FirebaseFirestore.instance
-        .collection('quizzes')
-        .doc(widget.quizId)
-        .collection('questions')
-        .orderBy('order')
-        .get();
+    try {
+      final quizDoc = await FirebaseFirestore.instance
+          .collection('quizzes')
+          .doc(widget.quizId)
+          .get();
+      final quizData = quizDoc.data();
 
-    final attemptDoc = await _attemptRef.get();
-    final attemptData = attemptDoc.data() as Map<String, dynamic>?;
+      final questionsSnap = await FirebaseFirestore.instance
+          .collection('quizzes')
+          .doc(widget.quizId)
+          .collection('questions')
+          .orderBy('order')
+          .get();
 
-    if (!mounted) return;
-    setState(() {
-      _questions = questionsSnap.docs;
-      _totalPoints = _questions.fold<int>(
-        0,
-        (total, q) =>
-            total +
-            ((q.data() as Map<String, dynamic>)['points'] as int? ?? 100),
-      );
-      if (attemptData != null && attemptData['status'] == 'completed') {
-        _reviewMode = true;
-        _existingAnswers = Map<String, dynamic>.from(
-          attemptData['answers'] ?? {},
+      final attemptDoc = await _attemptRef.get();
+      final attemptData = attemptDoc.data() as Map<String, dynamic>?;
+
+      if (!mounted) return;
+      setState(() {
+        _questions = questionsSnap.docs;
+        _totalPoints = _questions.fold<int>(
+          0,
+          (total, q) =>
+              total +
+              ((q.data() as Map<String, dynamic>)['points'] as int? ?? 100),
         );
-        _finalScore = attemptData['score'] as int? ?? 0;
-      }
-      _loading = false;
-    });
+        _maxAttempts = quizData?['maxAttempts'] as int? ?? 1;
+        _dueDate = (quizData?['dueDate'] as Timestamp?)?.toDate();
+        _attemptsUsed = attemptData?['attemptsUsed'] as int? ?? 0;
+        if (attemptData != null && attemptData['status'] == 'completed') {
+          _reviewMode = true;
+          _existingAnswers = Map<String, dynamic>.from(
+            attemptData['answers'] ?? {},
+          );
+          _finalScore = attemptData['score'] as int? ?? 0;
+        }
+        _loading = false;
+      });
+    } catch (e) {
+      // Without this, any failed read here (e.g. a permissions rule
+      // mis-evaluating on a not-yet-existing quizAttempts doc - a real bug
+      // this project hit once already, see firestore.rules' quizAttempts
+      // comment) left _loading stuck true forever with no visible error -
+      // "loading non-stop" with nothing in the UI to explain why.
+      if (!mounted) return;
+      setState(() {
+        _loadError = 'Could not load this quiz: $e';
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -130,6 +165,7 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
       'score': score,
       'totalPoints': _totalPoints,
       'answers': _selectedAnswers,
+      'attemptsUsed': _attemptsUsed + 1,
     });
 
     if (mounted) {
@@ -137,9 +173,22 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
         _reviewMode = true;
         _existingAnswers = Map<String, dynamic>.from(_selectedAnswers);
         _finalScore = score;
+        _attemptsUsed += 1;
         _submitting = false;
       });
     }
+  }
+
+  // Only reachable when _canRetake is true (attempts remain and the quiz
+  // isn't past its due date) - drops back into answering mode with a clean
+  // slate. The PREVIOUS attempt's score/answers are overwritten wholesale
+  // on the next _submit(), not kept as history (see file header).
+  void _retake() {
+    setState(() {
+      _reviewMode = false;
+      _selectedAnswers.clear();
+      _existingAnswers = null;
+    });
   }
 
   @override
@@ -155,6 +204,40 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  _loadError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black54),
+                ),
+              ),
+            )
+          : (!_reviewMode && _pastDue)
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.event_busy_outlined,
+                      size: 56,
+                      color: Colors.black26,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "This quiz's due date has passed. You can no longer "
+                      'attempt it.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            )
           : Container(
               decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
               child: Column(
@@ -241,6 +324,27 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
             'Quiz completed — review your answers below',
             style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
+          if (_maxAttempts > 1) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Attempts used: $_attemptsUsed / $_maxAttempts',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ],
+          if (_canRetake) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _retake,
+              icon: const Icon(Icons.replay, color: Colors.white, size: 16),
+              label: const Text(
+                'Retake Quiz',
+                style: TextStyle(color: Colors.white),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white),
+              ),
+            ),
+          ],
         ],
       ),
     );
