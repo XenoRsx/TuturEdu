@@ -12,6 +12,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/empty_state.dart';
 import 'chat_screen.dart';
 
 class CreateGroupChatScreen extends StatefulWidget {
@@ -133,224 +134,237 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
       body: _loadingSubjects
           ? const Center(child: CircularProgressIndicator())
           : _teacherSubjects.isEmpty
-              ? Center(
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.menu_book_outlined,
+                      size: 56,
+                      color: Colors.grey.shade300,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No subjects assigned to your account yet. Ask an '
+                      'Admin to set your subjects before creating a group.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Column(
+              children: [
+                Card(
+                  margin: const EdgeInsets.all(12),
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.menu_book_outlined, size: 56, color: Colors.grey.shade300),
-                        const SizedBox(height: 12),
                         const Text(
-                          'No subjects assigned to your account yet. Ask an '
-                          'Admin to set your subjects before creating a group.',
-                          textAlign: TextAlign.center,
+                          'Subject / Class',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          initialValue: _selectedSubject,
+                          items: _teacherSubjects
+                              .map(
+                                (s) =>
+                                    DropdownMenuItem(value: s, child: Text(s)),
+                              )
+                              .toList(),
+                          onChanged: _onSubjectChanged,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Group Name',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _groupNameController,
+                          decoration: const InputDecoration(
+                            hintText: 'e.g. Add Maths Form 4 - Batch A',
+                          ),
                         ),
                       ],
                     ),
                   ),
-                )
-              : Column(
-                  children: [
-                    Card(
-                      margin: const EdgeInsets.all(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Subject / Class',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
-                              initialValue: _selectedSubject,
-                              items: _teacherSubjects
-                                  .map(
-                                    (s) => DropdownMenuItem(value: s, child: Text(s)),
-                                  )
-                                  .toList(),
-                              onChanged: _onSubjectChanged,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Group Name',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 6),
-                            TextField(
-                              controller: _groupNameController,
-                              decoration: const InputDecoration(
-                                hintText: 'e.g. Add Maths Form 4 - Batch A',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _selectedSubject == null
-                          ? Center(
-                              child: Text(
-                                'Select a subject first.',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                            )
-                          : StreamBuilder<QuerySnapshot>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('users')
-                                  .where('role', isEqualTo: 'Student')
-                                  .where('subjects', arrayContains: _selectedSubject)
-                                  .snapshots(),
-                              builder: (context, snapshot) {
-                                if (snapshot.hasError) {
-                                  return Center(
-                                    child: Text('Error: ${snapshot.error}'),
-                                  );
-                                }
-                                if (!snapshot.hasData) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
-
-                                final students = snapshot.data!.docs;
-
-                                if (students.isEmpty) {
-                                  return Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.people_outline,
-                                          size: 56,
-                                          color: Colors.grey.shade300,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          'No students enrolled in this subject yet.',
-                                          style: TextStyle(color: Colors.grey.shade600),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }
-
-                                final allSelected =
-                                    _selectedStudentUids.length == students.length;
-
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            '${_selectedStudentUids.length} / ${students.length} selected',
-                                            style: const TextStyle(
-                                              fontSize: 12.5,
-                                              color: Colors.black54,
-                                            ),
-                                          ),
-                                          TextButton(
-                                            onPressed: () {
-                                              setState(() {
-                                                if (allSelected) {
-                                                  _selectedStudentUids.clear();
-                                                } else {
-                                                  _selectedStudentUids
-                                                    ..clear()
-                                                    ..addAll(students.map((d) => d.id));
-                                                }
-                                              });
-                                            },
-                                            child: Text(
-                                              allSelected ? 'Deselect All' : 'Select All',
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        itemCount: students.length,
-                                        itemBuilder: (context, index) {
-                                          final doc = students[index];
-                                          final name = doc['name'] ?? 'Unnamed';
-                                          final selected =
-                                              _selectedStudentUids.contains(doc.id);
-
-                                          return CheckboxListTile(
-                                            value: selected,
-                                            selected: selected,
-                                            selectedTileColor: Colors.green.withValues(alpha: 0.06),
-                                            title: Text(
-                                              name,
-                                              style: const TextStyle(fontWeight: FontWeight.w500),
-                                            ),
-                                            secondary: CircleAvatar(
-                                              backgroundColor: Colors.green.shade100,
-                                              child: Text(
-                                                name.isNotEmpty
-                                                    ? name[0].toUpperCase()
-                                                    : '?',
-                                                style: const TextStyle(color: Colors.green),
-                                              ),
-                                            ),
-                                            activeColor: Colors.green,
-                                            onChanged: (checked) {
-                                              setState(() {
-                                                if (checked == true) {
-                                                  _selectedStudentUids.add(doc.id);
-                                                } else {
-                                                  _selectedStudentUids.remove(doc.id);
-                                                }
-                                              });
-                                            },
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                    ),
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton.icon(
-                            onPressed: _creating ? null : _createGroup,
-                            icon: _creating
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.groups),
-                            label: Text(_creating ? 'Creating...' : 'Create Group'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
+                ),
+                Expanded(
+                  child: _selectedSubject == null
+                      ? Center(
+                          child: Text(
+                            'Select a subject first.',
+                            style: TextStyle(
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                             ),
                           ),
+                        )
+                      : StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .where('role', isEqualTo: 'Student')
+                              .where(
+                                'subjects',
+                                arrayContains: _selectedSubject,
+                              )
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return Center(
+                                child: Text('Error: ${snapshot.error}'),
+                              );
+                            }
+                            if (!snapshot.hasData) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+
+                            final students = snapshot.data!.docs;
+
+                            if (students.isEmpty) {
+                              return const EmptyState(
+                                icon: Icons.people_outline,
+                                title:
+                                    'No students enrolled in this subject yet.',
+                              );
+                            }
+
+                            final allSelected =
+                                _selectedStudentUids.length == students.length;
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        '${_selectedStudentUids.length} / ${students.length} selected',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall?.color,
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            if (allSelected) {
+                                              _selectedStudentUids.clear();
+                                            } else {
+                                              _selectedStudentUids
+                                                ..clear()
+                                                ..addAll(
+                                                  students.map((d) => d.id),
+                                                );
+                                            }
+                                          });
+                                        },
+                                        child: Text(
+                                          allSelected
+                                              ? 'Deselect All'
+                                              : 'Select All',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: students.length,
+                                    itemBuilder: (context, index) {
+                                      final doc = students[index];
+                                      final name = doc['name'] ?? 'Unnamed';
+                                      final selected = _selectedStudentUids
+                                          .contains(doc.id);
+
+                                      return CheckboxListTile(
+                                        value: selected,
+                                        selected: selected,
+                                        selectedTileColor: Colors.green
+                                            .withValues(alpha: 0.06),
+                                        title: Text(
+                                          name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        secondary: CircleAvatar(
+                                          backgroundColor:
+                                              Colors.green.shade100,
+                                          child: Text(
+                                            name.isNotEmpty
+                                                ? name[0].toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(
+                                              color: Colors.green,
+                                            ),
+                                          ),
+                                        ),
+                                        activeColor: Colors.green,
+                                        onChanged: (checked) {
+                                          setState(() {
+                                            if (checked == true) {
+                                              _selectedStudentUids.add(doc.id);
+                                            } else {
+                                              _selectedStudentUids.remove(
+                                                doc.id,
+                                              );
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton.icon(
+                        onPressed: _creating ? null : _createGroup,
+                        icon: _creating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.groups),
+                        label: Text(_creating ? 'Creating...' : 'Create Group'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
     );
   }
 }

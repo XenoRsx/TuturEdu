@@ -12,7 +12,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../main.dart' show kBrandBlue, kInkDark;
+import '../main.dart' show kBrandBlue;
 
 String _friendlyAuthMessage(Object error) {
   if (error is FirebaseAuthException) {
@@ -56,9 +56,7 @@ Future<void> showAuthErrorDialog(
         children: [
           const Icon(Icons.error_outline, color: Colors.redAccent),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(title, style: const TextStyle(color: kInkDark)),
-          ),
+          Expanded(child: Text(title)),
         ],
       ),
       content: Text(_friendlyAuthMessage(error)),

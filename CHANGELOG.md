@@ -10,6 +10,36 @@ was committed.
 
 ### Added
 
+- **Claymorphism visual style** — every raised surface across the shared
+  widget layer (`AppCard`, `IconTile`, `StatTile`, `MenuRow`, the received
+  side of `MessageBubble`) now uses a soft dual-direction shadow (`main.dart`'s
+  `clayShadows()` — a dark "sunken" shadow one side, a light "highlight" the
+  other) instead of a single flat shadow. Surface fill colors sit close to
+  the new pastel scaffold background (`kClayBaseLight`/`Dark`,
+  `kClaySurfaceLight`/`Dark`) rather than contrasting white, since the puffy
+  3D look comes from the shadow pair, not color contrast; buttons/icons
+  stay solid brand blue/green. The Interactive Quiz's own gameplay screens
+  keep their existing Kahoot-style look, unchanged.
+
+- **Dark Mode** — a Light/Dark/System toggle in Settings' new "Appearance"
+  section, saved to the account (`users/{uid}.themeMode`) rather than the
+  device, so it follows the user to any device they sign into.
+  `main.dart` listens for the signed-in account's preference and applies it
+  app-wide via a global `ValueNotifier<ThemeMode>` as soon as it's known.
+  `WelcomeScreen`/`LoginScreen`/`RegisterScreen`/`MfaVerificationScreen`
+  intentionally keep their fixed appearance regardless of the toggle (no
+  account is known yet at that point in the flow).
+- **App-wide UI/UX polish pass** — a new shared widget layer
+  (`lib/widgets/`: `AppCard`, `IconTile`, `StatTile`, `SectionLabel`,
+  `EmptyState`, `LinearStatBar`, `MenuRow`, `DashboardHeader`,
+  `MessageBubble`) generalizes the best hand-rolled patterns already in the
+  app. Teacher/Student/Parent dashboards gained a real "home" header (a
+  stat row + quick-action grid) instead of being just a chat list with a
+  few AppBar icons; chat bubbles gained a subtle shadow and asymmetric
+  corner; Attendance and Class Performance now show an actual progress bar
+  for percentages instead of just numbers; quiz lists, Manage Users/
+  Subjects, Admin Reports, and Settings all use consistent cards and empty
+  states.
 - **Multi-child support for the Parent Module** — a parent can now be
   linked to 2 or more students. `users/{parentUid}.childUid` (a single
   string) became `childUids` (an array, via `FieldValue.arrayUnion`/

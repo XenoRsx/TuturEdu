@@ -46,6 +46,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../utils/file_validator.dart';
 import '../utils/office_hours.dart';
 import '../utils/phishing_detector.dart';
+import '../widgets/app_card.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/message_bubble.dart';
 import 'full_image_screen.dart';
 import 'group_info_screen.dart';
 import 'user_profile_screen.dart';
@@ -578,7 +581,9 @@ class _ChatScreenState extends State<ChatScreen> {
   /// nothing unusual, red with a warning icon (and a confirm-before-open
   /// dialog) if it does.
   Widget _buildMessageText(String text, bool isMe) {
-    final baseColor = isMe ? Colors.white : Colors.black87;
+    final baseColor = isMe
+        ? Colors.white
+        : Theme.of(context).textTheme.bodyLarge?.color;
     final matches = urlPattern.allMatches(text).toList();
 
     if (matches.isEmpty) {
@@ -754,7 +759,10 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(
               'This message will be sent automatically once office hours '
               'reopen (${OfficeHours.nextOpenText()}).',
-              style: const TextStyle(fontSize: 13, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -958,7 +966,9 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isMe ? Colors.white.withValues(alpha: 0.15) : Colors.white,
+          color: isMe
+              ? Colors.white.withValues(alpha: 0.15)
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -976,7 +986,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 13,
-                  color: isMe ? Colors.white : Colors.black87,
+                  color: isMe
+                      ? Colors.white
+                      : Theme.of(context).textTheme.bodyLarge?.color,
                 ),
               ),
             ),
@@ -1059,8 +1071,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 final messages = snapshot.data!.docs;
 
                 if (messages.isEmpty) {
-                  return const Center(
-                    child: Text('No messages yet. Start the conversation!'),
+                  return const EmptyState(
+                    icon: Icons.chat_bubble_outline,
+                    title: 'No messages yet',
+                    subtitle: 'Start the conversation!',
                   );
                 }
 
@@ -1091,19 +1105,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         onLongPress: _canDeleteMessage(data, isMe)
                             ? () => _confirmDeleteMessage(messageDoc.id)
                             : null,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isMe ? Colors.blue : Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.7,
-                          ),
+                        child: MessageBubble(
+                          isMe: isMe,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
@@ -1163,7 +1166,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                     fontStyle: FontStyle.italic,
                                     color: isMe
                                         ? Colors.white70
-                                        : Colors.black54,
+                                        : Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall?.color,
                                   ),
                                 )
                               else if (attachmentUrl != null)
@@ -1186,7 +1191,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                         fontSize: 10,
                                         color: isMe
                                             ? Colors.white70
-                                            : Colors.black45,
+                                            : Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall?.color,
                                       ),
                                     ),
                                     if (isMe) ...[
@@ -1214,100 +1221,105 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildLockedBanner() {
-    return Container(
-      width: double.infinity,
-      color: Colors.orange.shade100,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                _overtimeActive
-                    ? Icons.bolt
-                    : (_isTeacherOnLeave
-                          ? Icons.beach_access_outlined
-                          : (_teacherOffDuty
-                                ? Icons.work_off_outlined
-                                : Icons.lock_clock)),
-                color: Colors.orange,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+      child: AppCard(
+        color: Colors.orange.shade100,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
                   _overtimeActive
-                      ? 'Overtime Mode active — your message will be marked as an after-hours reply.'
-                      : _isTeacherOnLeave
-                      ? 'This teacher is on leave until '
-                            '${_teacherLeaveEnd!.day.toString().padLeft(2, '0')}/'
-                            '${_teacherLeaveEnd!.month.toString().padLeft(2, '0')}/'
-                            '${_teacherLeaveEnd!.year}. Chat will reopen after that.'
-                      : _teacherOffDuty
-                      ? 'This teacher is currently Off-Duty. Chat will reopen once '
-                            'they go back On-Duty.'
-                      : 'Chat is closed outside office hours (${OfficeHours.officeHourText()}). '
-                            'Reopens: ${OfficeHours.nextOpenText()}.',
-                  style: const TextStyle(fontSize: 12.5, color: Colors.black87),
+                      ? Icons.bolt
+                      : (_isTeacherOnLeave
+                            ? Icons.beach_access_outlined
+                            : (_teacherOffDuty
+                                  ? Icons.work_off_outlined
+                                  : Icons.lock_clock)),
+                  color: Colors.orange,
+                  size: 20,
                 ),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _overtimeActive
+                        ? 'Overtime Mode active — your message will be marked as an after-hours reply.'
+                        : _isTeacherOnLeave
+                        ? 'This teacher is on leave until '
+                              '${_teacherLeaveEnd!.day.toString().padLeft(2, '0')}/'
+                              '${_teacherLeaveEnd!.month.toString().padLeft(2, '0')}/'
+                              '${_teacherLeaveEnd!.year}. Chat will reopen after that.'
+                        : _teacherOffDuty
+                        ? 'This teacher is currently Off-Duty. Chat will reopen once '
+                              'they go back On-Duty.'
+                        : 'Chat is closed outside office hours (${OfficeHours.officeHourText()}). '
+                              'Reopens: ${OfficeHours.nextOpenText()}.',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (!_overtimeActive) ...[
+              const SizedBox(height: 10),
+              if (_isTeacher)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _activateOvertimeReplyNow,
+                        icon: const Icon(Icons.bolt, size: 16),
+                        label: const Text(
+                          'Reply Now (Overtime)',
+                          style: TextStyle(fontSize: 12.5),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.deepOrange,
+                          side: const BorderSide(color: Colors.deepOrange),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _openScheduleReplyDialog,
+                        icon: const Icon(Icons.schedule_send, size: 16),
+                        label: const Text(
+                          'Schedule Reply',
+                          style: TextStyle(fontSize: 12.5),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                          side: const BorderSide(color: Colors.blue),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _openScheduleReplyDialog,
+                    icon: const Icon(Icons.schedule_send, size: 16),
+                    label: const Text(
+                      'Schedule Message',
+                      style: TextStyle(fontSize: 12.5),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                    ),
+                  ),
+                ),
             ],
-          ),
-          if (!_overtimeActive) ...[
-            const SizedBox(height: 10),
-            if (_isTeacher)
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _activateOvertimeReplyNow,
-                      icon: const Icon(Icons.bolt, size: 16),
-                      label: const Text(
-                        'Reply Now (Overtime)',
-                        style: TextStyle(fontSize: 12.5),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.deepOrange,
-                        side: const BorderSide(color: Colors.deepOrange),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _openScheduleReplyDialog,
-                      icon: const Icon(Icons.schedule_send, size: 16),
-                      label: const Text(
-                        'Schedule Reply',
-                        style: TextStyle(fontSize: 12.5),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue,
-                        side: const BorderSide(color: Colors.blue),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _openScheduleReplyDialog,
-                  icon: const Icon(Icons.schedule_send, size: 16),
-                  label: const Text(
-                    'Schedule Message',
-                    style: TextStyle(fontSize: 12.5),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.blue,
-                    side: const BorderSide(color: Colors.blue),
-                  ),
-                ),
-              ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1333,51 +1345,53 @@ class _ChatScreenState extends State<ChatScreen> {
 
         final docs = snapshot.data!.docs;
 
-        return Container(
-          width: double.infinity,
-          color: Colors.blue.shade50,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: docs.map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              final text = data['text'] ?? '';
-              final scheduledFor = (data['scheduledFor'] as Timestamp?)
-                  ?.toDate();
-              final timeText = scheduledFor != null
-                  ? '${scheduledFor.hour.toString().padLeft(2, '0')}:${scheduledFor.minute.toString().padLeft(2, '0')}'
-                  : '';
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+          child: AppCard(
+            color: Colors.blue.shade50,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                final text = data['text'] ?? '';
+                final scheduledFor = (data['scheduledFor'] as Timestamp?)
+                    ?.toDate();
+                final timeText = scheduledFor != null
+                    ? '${scheduledFor.hour.toString().padLeft(2, '0')}:${scheduledFor.minute.toString().padLeft(2, '0')}'
+                    : '';
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.schedule_send,
-                      size: 16,
-                      color: Colors.blueGrey,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Scheduled $timeText: "$text"',
-                        style: const TextStyle(fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => _cancelScheduledReply(doc.id),
-                      child: const Icon(
-                        Icons.close,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.schedule_send,
                         size: 16,
-                        color: Colors.redAccent,
+                        color: Colors.blueGrey,
                       ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Scheduled $timeText: "$text"',
+                          style: const TextStyle(fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => _cancelScheduledReply(doc.id),
+                        child: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         );
       },
@@ -1408,10 +1422,14 @@ class _ChatScreenState extends State<ChatScreen> {
         separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
           final reply = _quickReplies[index];
+          final chipColor = Theme.of(context).colorScheme.primary;
           return ActionChip(
-            label: Text(reply, style: const TextStyle(fontSize: 12.5)),
-            backgroundColor: Colors.blue.shade50,
-            side: BorderSide(color: Colors.blue.shade100),
+            label: Text(
+              reply,
+              style: TextStyle(fontSize: 12.5, color: chipColor),
+            ),
+            backgroundColor: chipColor.withValues(alpha: 0.1),
+            side: BorderSide(color: chipColor.withValues(alpha: 0.3)),
             onPressed: () => _sendMessage(quickReplyText: reply),
           );
         },

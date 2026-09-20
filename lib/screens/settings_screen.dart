@@ -24,9 +24,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
+import '../main.dart' show kBrandBlue, kInkMuted;
 import '../utils/notification_sounds.dart';
 import '../utils/push_notifications.dart';
+import '../widgets/app_card.dart';
+import '../widgets/section_label.dart';
 import 'login_screen.dart';
 import 'welcome_screen.dart';
 
@@ -218,6 +220,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _showSnack('Leave dates cleared.');
   }
 
+  // ----- Appearance (Light/Dark/System, see BLUEPRINT.md) -----
+  // Written to the account (not local device storage) so the choice follows
+  // the user to any device they sign into - main.dart's authStateChanges()
+  // listener applies it app-wide as soon as it's known, not just while this
+  // screen happens to be open.
+  Future<void> _setThemeMode(String mode) async {
+    await _userRef.update({'themeMode': mode});
+  }
+
   // ----- Push notifications on/off -----
   Future<void> _togglePush(bool enabled) async {
     await _userRef.update({'pushEnabled': enabled});
@@ -342,63 +353,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
               defaultNotificationSoundId;
           final leaveStart = (data['leaveStart'] as Timestamp?)?.toDate();
           final leaveEnd = (data['leaveEnd'] as Timestamp?)?.toDate();
+          final themeMode = (data['themeMode'] as String?) ?? 'system';
 
           return AbsorbPointer(
             absorbing: _busy,
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundColor: kBrandBlue.withValues(alpha: 0.15),
-                          child: Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: kBrandBlue,
+                AppCard(
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: kBrandBlue.withValues(alpha: 0.15),
+                        child: Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: kBrandBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodyLarge?.color,
+                              ),
                             ),
-                          ),
+                            Text(
+                              email,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.color,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                            Text(
+                              role,
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.color,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: kInkDark,
-                                ),
-                              ),
-                              Text(
-                                email,
-                                style: const TextStyle(
-                                  color: kInkMuted,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                              Text(
-                                role,
-                                style: const TextStyle(
-                                  color: kInkMuted,
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                            ],
-                          ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: 'Edit Profile',
+                        onPressed: () => _openEditProfileDialog(name),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                const SectionLabel('Appearance'),
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: RadioGroup<String>(
+                    groupValue: themeMode,
+                    onChanged: (value) {
+                      if (value != null) _setThemeMode(value);
+                    },
+                    child: const Column(
+                      children: [
+                        RadioListTile<String>(
+                          value: 'system',
+                          secondary: Icon(Icons.brightness_auto_outlined),
+                          title: Text('System'),
+                          activeColor: kBrandBlue,
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined),
-                          tooltip: 'Edit Profile',
-                          onPressed: () => _openEditProfileDialog(name),
+                        Divider(height: 1),
+                        RadioListTile<String>(
+                          value: 'light',
+                          secondary: Icon(Icons.light_mode_outlined),
+                          title: Text('Light'),
+                          activeColor: kBrandBlue,
+                        ),
+                        Divider(height: 1),
+                        RadioListTile<String>(
+                          value: 'dark',
+                          secondary: Icon(Icons.dark_mode_outlined),
+                          title: Text('Dark'),
+                          activeColor: kBrandBlue,
                         ),
                       ],
                     ),
@@ -407,8 +458,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 16),
 
                 if (role == 'Teacher') ...[
-                  _sectionLabel('Leave / Holiday'),
-                  Card(
+                  const SectionLabel('Leave / Holiday'),
+                  AppCard(
+                    padding: EdgeInsets.zero,
                     child: Column(
                       children: [
                         ListTile(
@@ -442,8 +494,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                _sectionLabel('Notifications'),
-                Card(
+                const SectionLabel('Notifications'),
+                AppCard(
+                  padding: EdgeInsets.zero,
                   child: SwitchListTile(
                     secondary: const Icon(
                       Icons.notifications_outlined,
@@ -457,8 +510,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                _sectionLabel('Notification Sound'),
-                Card(
+                const SectionLabel('Notification Sound'),
+                AppCard(
+                  padding: EdgeInsets.zero,
                   child: RadioGroup<String>(
                     groupValue: selectedSound,
                     onChanged: (value) {
@@ -482,8 +536,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                _sectionLabel('Account'),
-                Card(
+                const SectionLabel('Account'),
+                AppCard(
+                  padding: EdgeInsets.zero,
                   child: Column(
                     children: [
                       ListTile(
@@ -506,8 +561,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                _sectionLabel('Delete account'),
-                Card(
+                const SectionLabel('Delete account'),
+                AppCard(
+                  padding: EdgeInsets.zero,
                   child: ListTile(
                     leading: const Icon(
                       Icons.delete_forever,
@@ -531,20 +587,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _sectionLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 12.5,
-          color: kInkMuted,
-        ),
       ),
     );
   }

@@ -15,6 +15,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/dashboard_header.dart';
+import '../widgets/stat_tile.dart';
 import 'chat_list_screen.dart';
 import 'class_performance_screen.dart';
 import 'create_group_chat_screen.dart';
@@ -151,10 +153,63 @@ class TeacherDashboard extends StatelessWidget {
     );
   }
 
+  Widget _buildHeader(
+    BuildContext context, {
+    required int totalUnread,
+    required int totalChats,
+    required int totalGroups,
+  }) {
+    return DashboardHeader(
+      stats: [
+        StatTile(value: '$totalUnread', label: 'Unread', color: Colors.green),
+        StatTile(
+          value: '$totalChats',
+          label: 'Total Chats',
+          color: Colors.blue,
+        ),
+        StatTile(
+          value: '$totalGroups',
+          label: 'Groups',
+          color: Colors.deepPurple,
+        ),
+      ],
+      actions: [
+        QuickAction(
+          icon: Icons.fact_check_outlined,
+          label: 'Attendance',
+          color: Colors.green,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const TakeAttendanceScreen()),
+          ),
+        ),
+        QuickAction(
+          icon: Icons.insights_outlined,
+          label: 'Performance',
+          color: Colors.blue,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ClassPerformanceScreen()),
+          ),
+        ),
+        QuickAction(
+          icon: Icons.quiz_outlined,
+          label: 'Quizzes',
+          color: Colors.deepPurple,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const QuizListScreen()),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChatListScreen(
       appBarColor: Colors.green,
+      homeHeader: _buildHeader,
       extraActions: [
         _buildDutyToggle(context),
         IconButton(
@@ -166,43 +221,6 @@ class TeacherDashboard extends StatelessWidget {
           ),
         ),
       ],
-      tabBarTrailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Take Attendance',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TakeAttendanceScreen()),
-              );
-            },
-            icon: const Icon(Icons.fact_check_outlined, color: Colors.white),
-          ),
-          IconButton(
-            tooltip: 'Class Performance',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ClassPerformanceScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.insights_outlined, color: Colors.white),
-          ),
-          IconButton(
-            tooltip: 'Quizzes',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const QuizListScreen()),
-              );
-            },
-            icon: const Icon(Icons.quiz_outlined, color: Colors.white),
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openNewChatMenu(context),
         backgroundColor: Colors.green,

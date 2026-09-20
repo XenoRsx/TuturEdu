@@ -16,24 +16,35 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../main.dart' show kInkMuted;
 import '../utils/push_notifications.dart';
 import '../utils/unread_badge.dart';
+import '../widgets/empty_state.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
+
+/// Fixed content rendered above the tabs/list - typically a [DashboardHeader]
+/// built from the counts this screen already computes, so a role dashboard
+/// gets real "home" content for free instead of an extra Firestore query.
+typedef ChatListHomeHeaderBuilder =
+    Widget Function(
+      BuildContext context, {
+      required int totalUnread,
+      required int totalChats,
+      required int totalGroups,
+    });
 
 class ChatListScreen extends StatefulWidget {
   final Widget? floatingActionButton;
   final Color appBarColor;
-  final Widget? tabBarTrailing;
   final List<Widget>? extraActions;
+  final ChatListHomeHeaderBuilder? homeHeader;
 
   const ChatListScreen({
     super.key,
     this.floatingActionButton,
     this.appBarColor = Colors.blue,
-    this.tabBarTrailing,
     this.extraActions,
+    this.homeHeader,
   });
 
   @override
@@ -156,7 +167,9 @@ class _ChatListScreenState extends State<ChatListScreen>
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal,
-                  color: isUnread ? Colors.black87 : kInkMuted,
+                  color: isUnread
+                      ? Theme.of(context).textTheme.bodyLarge?.color
+                      : Theme.of(context).textTheme.bodySmall?.color,
                 ),
               ),
             ),
@@ -170,7 +183,9 @@ class _ChatListScreenState extends State<ChatListScreen>
               _formatTime(data['lastUpdated']),
               style: TextStyle(
                 fontSize: 11,
-                color: isUnread ? Colors.green.shade700 : Colors.black45,
+                color: isUnread
+                    ? Colors.green.shade700
+                    : Theme.of(context).textTheme.bodySmall?.color,
                 fontWeight: isUnread ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -286,20 +301,7 @@ class _ChatListScreenState extends State<ChatListScreen>
     String emptyMessage,
   ) {
     if (chats.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 56,
-              color: Colors.grey.shade300,
-            ),
-            const SizedBox(height: 12),
-            Text(emptyMessage, style: TextStyle(color: Colors.grey.shade600)),
-          ],
-        ),
-      );
+      return EmptyState(icon: Icons.chat_bubble_outline, title: emptyMessage);
     }
 
     return ListView.builder(
@@ -360,32 +362,7 @@ class _ChatListScreenState extends State<ChatListScreen>
 
         return Scaffold(
           appBar: AppBar(
-            title: Row(
-              children: [
-                const Text('Chats'),
-                if (totalUnread > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.greenAccent.shade400,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      totalUnread > 99 ? '99+ unread' : '$totalUnread unread',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            title: const Text('Chats'),
             backgroundColor: widget.appBarColor,
             actions: [
               ...?widget.extraActions,
@@ -395,47 +372,77 @@ class _ChatListScreenState extends State<ChatListScreen>
               ),
             ],
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TabBar(
-                      controller: _tabController,
-                      indicatorColor: Colors.white,
-                      labelColor: Colors.white,
-                      unselectedLabelColor: Colors.white70,
-                      tabs: const [
-                        Tab(text: 'All'),
-                        Tab(text: 'Individual'),
-                        Tab(text: 'Groups'),
-                      ],
-                    ),
+              preferredSize: const Size.fromHeight(56),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Container(
+                  height: 42,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(21),
                   ),
-                  if (widget.tabBarTrailing != null) widget.tabBarTrailing!,
-                ],
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: Colors.transparent,
+                    labelColor: widget.appBarColor,
+                    unselectedLabelColor: Colors.white,
+                    labelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    tabs: const [
+                      Tab(text: 'All'),
+                      Tab(text: 'Individual'),
+                      Tab(text: 'Groups'),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-          body: TabBarView(
-            controller: _tabController,
+          body: Column(
             children: [
-              _buildList(
-                context,
-                allChats,
-                currentUser.uid,
-                'No conversations yet.',
-              ),
-              _buildList(
-                context,
-                individualChats,
-                currentUser.uid,
-                'No individual chats yet.',
-              ),
-              _buildList(
-                context,
-                groupChats,
-                currentUser.uid,
-                'No group chats yet.',
+              if (widget.homeHeader != null)
+                widget.homeHeader!(
+                  context,
+                  totalUnread: totalUnread,
+                  totalChats: allChats.length,
+                  totalGroups: groupChats.length,
+                ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildList(
+                      context,
+                      allChats,
+                      currentUser.uid,
+                      'No conversations yet.',
+                    ),
+                    _buildList(
+                      context,
+                      individualChats,
+                      currentUser.uid,
+                      'No individual chats yet.',
+                    ),
+                    _buildList(
+                      context,
+                      groupChats,
+                      currentUser.uid,
+                      'No group chats yet.',
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

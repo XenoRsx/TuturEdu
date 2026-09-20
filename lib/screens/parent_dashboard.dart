@@ -8,6 +8,8 @@
 // (linked student's attendance/performance) and "Warning Letters".
 
 import 'package:flutter/material.dart';
+import '../widgets/dashboard_header.dart';
+import '../widgets/stat_tile.dart';
 import 'chat_list_screen.dart';
 import 'child_overview_screen.dart';
 import 'parent_warning_letters_screen.dart';
@@ -58,10 +60,51 @@ class ParentDashboard extends StatelessWidget {
     );
   }
 
+  Widget _buildHeader(
+    BuildContext context, {
+    required int totalUnread,
+    required int totalChats,
+    required int totalGroups,
+  }) {
+    return DashboardHeader(
+      stats: [
+        StatTile(value: '$totalUnread', label: 'Unread', color: Colors.orange),
+        StatTile(
+          value: '$totalChats',
+          label: 'Total Chats',
+          color: Colors.blue,
+        ),
+      ],
+      actions: [
+        QuickAction(
+          icon: Icons.family_restroom,
+          label: 'My Child',
+          color: Colors.orange,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ChildOverviewScreen()),
+          ),
+        ),
+        QuickAction(
+          icon: Icons.warning_amber_rounded,
+          label: 'Warning Letters',
+          color: Colors.red,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const ParentWarningLettersScreen(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChatListScreen(
       appBarColor: Colors.orange,
+      homeHeader: _buildHeader,
       extraActions: [
         IconButton(
           tooltip: 'Settings',
@@ -72,33 +115,6 @@ class ParentDashboard extends StatelessWidget {
           ),
         ),
       ],
-      tabBarTrailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Warning Letters',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ParentWarningLettersScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
-          ),
-          IconButton(
-            tooltip: 'My Child',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ChildOverviewScreen()),
-              );
-            },
-            icon: const Icon(Icons.family_restroom, color: Colors.white),
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openMenu(context),
         backgroundColor: Colors.orange,

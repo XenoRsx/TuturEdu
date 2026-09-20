@@ -2,9 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
+import '../main.dart' show kBrandBlue;
 import '../utils/auth_error_dialog.dart';
 import '../utils/push_notifications.dart';
+import '../widgets/app_card.dart';
 import 'mfa_verification_screen.dart';
 import 'teacher_dashboard.dart';
 import 'student_dashboard.dart';
@@ -112,115 +113,100 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF4FAF7), Color(0xFFEAF3FB)],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Align(
-                alignment: Alignment.topLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: kInkDark),
-                  onPressed: () => Navigator.pop(context),
-                ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.topLeft,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.pop(context),
               ),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    children: [
-                      _buildArenaMatrixBranding(),
-                      const SizedBox(height: 28),
-                      Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    _buildArenaMatrixBranding(context),
+                    const SizedBox(height: 28),
+                    AppCard(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Welcome back',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyLarge?.color,
                             ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text(
-                              'Welcome back',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: kInkDark,
-                              ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Log in to continue to your chats',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.color,
                             ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Log in to continue to your chats',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 13, color: kInkMuted),
+                          ),
+                          const SizedBox(height: 24),
+                          TextField(
+                            controller: _emailController,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              prefixIcon: Icon(Icons.email_outlined),
                             ),
-                            const SizedBox(height: 24),
-                            TextField(
-                              controller: _emailController,
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.email_outlined),
-                              ),
-                              keyboardType: TextInputType.emailAddress,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _passwordController,
+                            decoration: const InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: Icon(Icons.lock_outline),
                             ),
-                            const SizedBox(height: 14),
-                            TextField(
-                              controller: _passwordController,
-                              decoration: const InputDecoration(
-                                labelText: 'Password',
-                                prefixIcon: Icon(Icons.lock_outline),
-                              ),
-                              obscureText: true,
-                              onSubmitted: (_) => _login(),
-                            ),
-                            const SizedBox(height: 22),
-                            SizedBox(
-                              height: 52,
-                              child: _isLoading
-                                  ? const Center(
-                                      child: CircularProgressIndicator(),
-                                    )
-                                  : ElevatedButton(
-                                      onPressed: _login,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: kBrandBlue,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      child: const Text(
-                                        'Log In',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                            obscureText: true,
+                            onSubmitted: (_) => _login(),
+                          ),
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            height: 52,
+                            child: _isLoading
+                                ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : ElevatedButton(
+                                    onPressed: _login,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: kBrandBlue,
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    child: const Text(
+                                      'Log In',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                            ),
-                          ],
-                        ),
+                                  ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -230,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // TuturEdu platform serves. Logo loads from
   // assets/images/arena_matrix_logo.png - falls back to a placeholder icon
   // if that file hasn't been added yet (avoids a crash).
-  Widget _buildArenaMatrixBranding() {
+  Widget _buildArenaMatrixBranding(BuildContext context) {
     return Column(
       children: [
         ClipRRect(
@@ -256,22 +242,26 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
+        Text(
           'Pusat Tuisyen Arena Matriks',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
-            color: kInkDark,
+            color: Theme.of(context).textTheme.bodyLarge?.color,
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'TuturEdu is the official chat platform for Pusat Tuisyen Arena '
           'Matriks, connecting students, parents & tutors in one safe '
           'conversation space, in line with the tuition centre\'s operating '
           'hours.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12.5, color: kInkMuted, height: 1.4),
+          style: TextStyle(
+            fontSize: 12.5,
+            color: Theme.of(context).textTheme.bodySmall?.color,
+            height: 1.4,
+          ),
         ),
       ],
     );

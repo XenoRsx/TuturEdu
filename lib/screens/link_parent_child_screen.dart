@@ -123,7 +123,9 @@ class _LinkParentChildScreenState extends State<LinkParentChildScreen> {
                   return Center(
                     child: Text(
                       'No students found.',
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                      ),
                     ),
                   );
                 }

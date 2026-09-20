@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/empty_state.dart';
 
 class ParentWarningLettersScreen extends StatelessWidget {
   const ParentWarningLettersScreen({super.key});
@@ -54,22 +55,9 @@ class ParentWarningLettersScreen extends StatelessWidget {
           final letters = snapshot.data!.docs;
 
           if (letters.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.mark_email_read_outlined,
-                    size: 56,
-                    color: Colors.grey.shade300,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No warning letters.',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.mark_email_read_outlined,
+              title: 'No warning letters.',
             );
           }
 

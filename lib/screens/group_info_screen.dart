@@ -17,7 +17,11 @@ class GroupInfoScreen extends StatelessWidget {
 
   const GroupInfoScreen({super.key, required this.chatId});
 
-  Future<void> _removeMember(BuildContext context, String uid, String name) async {
+  Future<void> _removeMember(
+    BuildContext context,
+    String uid,
+    String name,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -49,7 +53,9 @@ class GroupInfoScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Leave Group'),
-        content: const Text('You will no longer receive messages from this group.'),
+        content: const Text(
+          'You will no longer receive messages from this group.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -85,7 +91,10 @@ class GroupInfoScreen extends StatelessWidget {
         backgroundColor: Colors.green,
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('chats').doc(chatId).snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('chats')
+            .doc(chatId)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
@@ -106,22 +115,34 @@ class GroupInfoScreen extends StatelessWidget {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 28),
-                color: Colors.green.shade50,
+                color: Colors.green.withValues(alpha: 0.08),
                 child: Column(
                   children: [
                     CircleAvatar(
                       radius: 40,
                       backgroundColor: Colors.green.shade100,
-                      child: const Icon(Icons.groups, size: 40, color: Colors.green),
+                      child: const Icon(
+                        Icons.groups,
+                        size: 40,
+                        color: Colors.green,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       groupName,
-                      style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     if (subject != null) ...[
                       const SizedBox(height: 4),
-                      Text(subject, style: TextStyle(color: Colors.grey.shade600)),
+                      Text(
+                        subject,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -158,13 +179,20 @@ class GroupInfoScreen extends StatelessWidget {
               ...participants.map((uid) {
                 final isThisAdmin = uid == groupAdmin;
                 return FutureBuilder<DocumentSnapshot>(
-                  future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
+                  future: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(uid)
+                      .get(),
                   builder: (context, userSnapshot) {
-                    final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
+                    final userData =
+                        userSnapshot.data?.data() as Map<String, dynamic>?;
                     final name = userData?['name'] ?? 'Loading...';
 
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.green.shade100,
@@ -174,18 +202,26 @@ class GroupInfoScreen extends StatelessWidget {
                           ),
                         ),
                         title: Text(name),
-                        subtitle: isThisAdmin ? const Text('Group Admin') : null,
+                        subtitle: isThisAdmin
+                            ? const Text('Group Admin')
+                            : null,
                         trailing: isAdmin && !isThisAdmin
                             ? IconButton(
-                                icon: const Icon(Icons.person_remove_alt_1, color: Colors.red),
+                                icon: const Icon(
+                                  Icons.person_remove_alt_1,
+                                  color: Colors.red,
+                                ),
                                 tooltip: 'Remove member',
-                                onPressed: () => _removeMember(context, uid, name),
+                                onPressed: () =>
+                                    _removeMember(context, uid, name),
                               )
                             : null,
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => UserProfileScreen(uid: uid)),
+                            MaterialPageRoute(
+                              builder: (_) => UserProfileScreen(uid: uid),
+                            ),
                           );
                         },
                       ),

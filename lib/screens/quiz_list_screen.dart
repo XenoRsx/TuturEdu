@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/quiz_theme.dart';
+import '../widgets/app_card.dart';
+import '../widgets/empty_state.dart';
 import 'create_quiz_screen.dart';
 import 'host_quiz_session_screen.dart';
 
@@ -156,30 +158,10 @@ class QuizListScreen extends StatelessWidget {
             final quizzes = snapshot.data!.docs;
 
             if (quizzes.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 84,
-                      height: 84,
-                      decoration: BoxDecoration(
-                        color: QuizTheme.primary.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.quiz_outlined,
-                        size: 40,
-                        color: QuizTheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No quizzes yet. Tap "New Quiz" to create one.',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
+              return const EmptyState(
+                icon: Icons.quiz_outlined,
+                title: 'No quizzes yet',
+                subtitle: 'Tap "New Quiz" to create one.',
               );
             }
 
@@ -200,78 +182,71 @@ class QuizListScreen extends StatelessWidget {
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: QuizTheme.primary.withValues(alpha: 0.08),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                  child: AppCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
                       ),
-                    ],
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    leading: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: BorderRadius.circular(12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const Icon(
-                        Icons.quiz_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                    title: Text(
-                      title,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      '$subject · $questionCount question(s) · ${_modeLabel(mode)}',
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                          ),
-                          tooltip: 'Delete',
-                          onPressed: () => _deleteQuiz(context, doc.id, title),
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        Icon(
-                          canHost
-                              ? Icons.play_circle_fill
-                              : Icons.assignment_turned_in_outlined,
-                          color: QuizTheme.primary,
-                          size: 28,
+                        child: const Icon(
+                          Icons.quiz_rounded,
+                          color: Colors.white,
                         ),
-                      ],
-                    ),
-                    onTap: () {
-                      if (!canHost) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'This quiz is Self-Paced only — students attempt it on their '
-                              'own, no live session to host.',
+                      ),
+                      title: Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        '$subject · $questionCount question(s) · ${_modeLabel(mode)}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
                             ),
+                            tooltip: 'Delete',
+                            onPressed: () =>
+                                _deleteQuiz(context, doc.id, title),
                           ),
-                        );
-                        return;
-                      }
-                      _hostSession(context, doc.id, title);
-                    },
+                          Icon(
+                            canHost
+                                ? Icons.play_circle_fill
+                                : Icons.assignment_turned_in_outlined,
+                            color: QuizTheme.primary,
+                            size: 28,
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        if (!canHost) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'This quiz is Self-Paced only — students attempt it on their '
+                                'own, no live session to host.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        _hostSession(context, doc.id, title);
+                      },
+                    ),
                   ),
                 );
               },

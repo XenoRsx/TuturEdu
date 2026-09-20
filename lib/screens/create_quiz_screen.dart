@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/quiz_theme.dart';
+import '../widgets/app_card.dart';
 
 class _QuestionDraft {
   final TextEditingController textController = TextEditingController();
@@ -204,19 +205,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
             : ListView(
                 padding: const EdgeInsets.all(12),
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: QuizTheme.primary.withValues(alpha: 0.08),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(16),
+                  AppCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -377,148 +366,142 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: QuizTheme.primary.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: badgeColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${index + 1}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${index + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Question ${index + 1}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: QuizTheme.primaryDark,
+                    const SizedBox(width: 8),
+                    Text(
+                      'Question ${index + 1}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: QuizTheme.primaryDark,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              if (_questions.length > 1)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _removeQuestion(index),
+                  ],
                 ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: q.textController,
-            decoration: InputDecoration(
-              hintText: 'Question text',
-              filled: true,
-              fillColor: QuizTheme.primary.withValues(alpha: 0.05),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
+                if (_questions.length > 1)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () => _removeQuestion(index),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: q.textController,
+              decoration: InputDecoration(
+                hintText: 'Question text',
+                filled: true,
+                fillColor: QuizTheme.primary.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Options (select the correct one)',
-            style: TextStyle(fontSize: 12.5, color: Colors.black54),
-          ),
-          RadioGroup<int>(
-            groupValue: q.correctIndex,
-            onChanged: (value) => setState(() => q.correctIndex = value ?? 0),
-            child: Column(
-              children: List.generate(4, (optionIndex) {
-                final optionColor = QuizTheme
-                    .optionColors[optionIndex % QuizTheme.optionColors.length];
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      Icon(
-                        QuizTheme.optionIcons[optionIndex %
-                            QuizTheme.optionIcons.length],
-                        color: optionColor,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
-                      Radio<int>(
-                        value: optionIndex,
-                        activeColor: QuizTheme.primary,
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: q.optionControllers[optionIndex],
-                          decoration: InputDecoration(
-                            hintText: 'Option ${optionIndex + 1}',
-                            isDense: true,
-                            filled: true,
-                            fillColor: optionColor.withValues(alpha: 0.06),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide.none,
+            const SizedBox(height: 10),
+            Text(
+              'Options (select the correct one)',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+            RadioGroup<int>(
+              groupValue: q.correctIndex,
+              onChanged: (value) => setState(() => q.correctIndex = value ?? 0),
+              child: Column(
+                children: List.generate(4, (optionIndex) {
+                  final optionColor =
+                      QuizTheme.optionColors[optionIndex %
+                          QuizTheme.optionColors.length];
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          QuizTheme.optionIcons[optionIndex %
+                              QuizTheme.optionIcons.length],
+                          color: optionColor,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Radio<int>(
+                          value: optionIndex,
+                          activeColor: QuizTheme.primary,
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: q.optionControllers[optionIndex],
+                            decoration: InputDecoration(
+                              hintText: 'Option ${optionIndex + 1}',
+                              isDense: true,
+                              filled: true,
+                              fillColor: optionColor.withValues(alpha: 0.06),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+                      ],
+                    ),
+                  );
+                }),
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  initialValue: q.timeLimitSeconds.toString(),
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Time limit (sec)',
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: q.timeLimitSeconds.toString(),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Time limit (sec)',
+                    ),
+                    onChanged: (value) =>
+                        q.timeLimitSeconds = int.tryParse(value) ?? 20,
                   ),
-                  onChanged: (value) =>
-                      q.timeLimitSeconds = int.tryParse(value) ?? 20,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  initialValue: q.points.toString(),
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Points'),
-                  onChanged: (value) => q.points = int.tryParse(value) ?? 100,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextFormField(
+                    initialValue: q.points.toString(),
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Points'),
+                    onChanged: (value) => q.points = int.tryParse(value) ?? 100,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

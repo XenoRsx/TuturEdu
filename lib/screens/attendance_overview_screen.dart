@@ -8,6 +8,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/app_card.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/stat_bar.dart';
 
 // Attendance rate below this percentage shows a low-attendance warning.
 const int _kLowAttendanceThreshold = 75;
@@ -58,18 +61,9 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
           final allRecords = snapshot.data!.docs;
 
           if (allRecords.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.event_busy, size: 56, color: Colors.grey.shade300),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No attendance records yet.',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
+            return const EmptyState(
+              icon: Icons.event_busy,
+              title: 'No attendance records yet.',
             );
           }
 
@@ -114,61 +108,64 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                 ),
               ),
               Container(
-                width: double.infinity,
                 margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
+                child: AppCard(
                   color: (isLow ? Colors.red : Colors.blue).withValues(
                     alpha: 0.06,
                   ),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: (isLow ? Colors.red : Colors.blue).withValues(
-                      alpha: 0.2,
-                    ),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      rate == null ? 'No data' : '${rate.toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: isLow ? Colors.red : Colors.blue,
+                  child: Column(
+                    children: [
+                      Text(
+                        rate == null
+                            ? 'No data'
+                            : '${rate.toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: isLow ? Colors.red : Colors.blue,
+                        ),
                       ),
-                    ),
-                    const Text(
-                      'Attendance Rate',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$attended / $total classes attended',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    if (isLow) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.red,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Low attendance warning (below $_kLowAttendanceThreshold%)',
-                            style: const TextStyle(
+                      Text(
+                        'Attendance Rate',
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
+                      ),
+                      if (rate != null) ...[
+                        const SizedBox(height: 10),
+                        LinearStatBar(
+                          value: rate / 100,
+                          color: isLow ? Colors.red : Colors.blue,
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      Text(
+                        '$attended / $total classes attended',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (isLow) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
                               color: Colors.red,
-                              fontWeight: FontWeight.w600,
+                              size: 18,
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Low attendance warning (below $_kLowAttendanceThreshold%)',
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               Expanded(

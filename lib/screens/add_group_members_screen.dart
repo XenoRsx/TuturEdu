@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/empty_state.dart';
 
 class AddGroupMembersScreen extends StatefulWidget {
   final String chatId;
@@ -75,27 +76,11 @@ class _AddGroupMembersScreenState extends State<AddGroupMembersScreen> {
                     .toList();
 
                 if (candidates.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.people_outline,
-                            size: 56,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Every student enrolled in "${widget.subject}" is '
-                            'already in this group.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    ),
+                  return EmptyState(
+                    icon: Icons.people_outline,
+                    title:
+                        'Every student enrolled in "${widget.subject}" is '
+                        'already in this group.',
                   );
                 }
 

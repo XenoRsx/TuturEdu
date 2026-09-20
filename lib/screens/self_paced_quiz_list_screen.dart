@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/quiz_theme.dart';
+import '../widgets/app_card.dart';
+import '../widgets/empty_state.dart';
 import 'attempt_quiz_screen.dart';
 
 class SelfPacedQuizListScreen extends StatefulWidget {
@@ -96,36 +98,10 @@ class _SelfPacedQuizListScreenState extends State<SelfPacedQuizListScreen> {
                       });
 
                   if (quizzes.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 84,
-                              height: 84,
-                              decoration: BoxDecoration(
-                                color: QuizTheme.primary.withValues(
-                                  alpha: 0.08,
-                                ),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.assignment_outlined,
-                                size: 40,
-                                color: QuizTheme.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No self-paced quizzes available for your subjects yet.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey.shade600),
-                            ),
-                          ],
-                        ),
-                      ),
+                    return const EmptyState(
+                      icon: Icons.assignment_outlined,
+                      title: 'No self-paced quizzes available',
+                      subtitle: 'Nothing for your subjects yet.',
                     );
                   }
 
@@ -144,94 +120,88 @@ class _SelfPacedQuizListScreenState extends State<SelfPacedQuizListScreen> {
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: QuizTheme.primary.withValues(alpha: 0.08),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                        child: AppCard(
+                          padding: EdgeInsets.zero,
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
                             ),
-                          ],
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          leading: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            child: const Icon(
-                              Icons.assignment_outlined,
-                              color: Colors.white,
+                            leading: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.assignment_outlined,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
-                          title: Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            '$subject · $questionCount question(s)',
-                          ),
-                          trailing: FutureBuilder<DocumentSnapshot>(
-                            future: FirebaseFirestore.instance
-                                .collection('quizAttempts')
-                                .doc('${doc.id}_${currentUser.uid}')
-                                .get(),
-                            builder: (context, attemptSnapshot) {
-                              final attemptData =
-                                  attemptSnapshot.data?.data()
-                                      as Map<String, dynamic>?;
-                              final completed =
-                                  attemptData?['status'] == 'completed';
-                              if (!completed) {
-                                return const Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey,
+                            title: Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '$subject · $questionCount question(s)',
+                            ),
+                            trailing: FutureBuilder<DocumentSnapshot>(
+                              future: FirebaseFirestore.instance
+                                  .collection('quizAttempts')
+                                  .doc('${doc.id}_${currentUser.uid}')
+                                  .get(),
+                              builder: (context, attemptSnapshot) {
+                                final attemptData =
+                                    attemptSnapshot.data?.data()
+                                        as Map<String, dynamic>?;
+                                final completed =
+                                    attemptData?['status'] == 'completed';
+                                if (!completed) {
+                                  return const Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.grey,
+                                  );
+                                }
+                                final score = attemptData?['score'] ?? 0;
+                                final total = attemptData?['totalPoints'] ?? 0;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '$score/$total',
+                                    style: const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 );
-                              }
-                              final score = attemptData?['score'] ?? 0;
-                              final total = attemptData?['totalPoints'] ?? 0;
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '$score/$total',
-                                  style: const TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
+                              },
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AttemptQuizScreen(
+                                    quizId: doc.id,
+                                    quizTitle: title,
                                   ),
                                 ),
                               );
                             },
                           ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AttemptQuizScreen(
-                                  quizId: doc.id,
-                                  quizTitle: title,
-                                ),
-                              ),
-                            );
-                          },
                         ),
                       );
                     },

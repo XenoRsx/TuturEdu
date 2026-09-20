@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/empty_state.dart';
 import 'chat_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -117,18 +118,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                 }).toList();
 
                 if (users.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off, size: 56, color: Colors.grey.shade300),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No ${widget.targetRole.toLowerCase()}s found.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
+                  return EmptyState(
+                    icon: Icons.search_off,
+                    title: 'No ${widget.targetRole.toLowerCase()}s found.',
                   );
                 }
 
@@ -146,28 +138,44 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                         : 'No subjects assigned yet';
 
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       child: ListTile(
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
                         leading: CircleAvatar(
-                          backgroundColor: widget.accentColor.withValues(alpha: 0.15),
+                          backgroundColor: widget.accentColor.withValues(
+                            alpha: 0.15,
+                          ),
                           child: Text(
                             name.isNotEmpty ? name[0].toUpperCase() : '?',
                             style: TextStyle(color: widget.accentColor),
                           ),
                         ),
-                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Text(
+                          name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         subtitle: Text(subjectsText),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.info_outline, color: Colors.grey),
+                              icon: const Icon(
+                                Icons.info_outline,
+                                color: Colors.grey,
+                              ),
                               tooltip: 'View profile',
                               onPressed: () => _viewProfile(context, doc.id),
                             ),
-                            Icon(Icons.chat_bubble_outline, color: widget.accentColor),
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              color: widget.accentColor,
+                            ),
                           ],
                         ),
                         onTap: () => _startChat(context, doc.id, name),

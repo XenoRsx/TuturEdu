@@ -14,7 +14,20 @@ import 'register_screen.dart';
 
 const _kInkDark = Color(0xFF16283D);
 const _kInkMuted = Color(0xFF64748B);
-const _kBorder = Color(0xFFE2E8F0);
+
+// These 2 constants above are the FIXED colors used inside the "About the
+// Centre" navy panel (solid dark bg + white text, always the same
+// regardless of theme - a deliberate highlight block, not scaffold-driven).
+// Everywhere else on this page sits on the plain Scaffold background, which
+// DOES follow the account's Light/Dark/System choice (see main.dart) - so
+// text/border colors there must come from these theme-aware helpers
+// instead, or they'd stay dark-on-dark (or light-on-light) if the system
+// theme flips.
+Color _inkDark(BuildContext context) =>
+    Theme.of(context).textTheme.bodyLarge?.color ?? _kInkDark;
+Color _inkMuted(BuildContext context) =>
+    Theme.of(context).textTheme.bodySmall?.color ?? _kInkMuted;
+Color _borderColor(BuildContext context) => Theme.of(context).dividerColor;
 
 class _Offering {
   final IconData icon;
@@ -108,7 +121,6 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
         child: Column(
           children: [
@@ -119,13 +131,13 @@ class WelcomeScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(28, 12, 20, 0),
               child: Row(
                 children: [
-                  const Text(
+                  Text(
                     'TuturEdu',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.2,
-                      color: _kInkDark,
+                      color: _inkDark(context),
                     ),
                   ),
                   const Spacer(),
@@ -136,12 +148,12 @@ class WelcomeScreen extends StatelessWidget {
                         MaterialPageRoute(builder: (_) => const LoginScreen()),
                       );
                     },
-                    child: const Text(
+                    child: Text(
                       'Log In',
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
-                        color: _kInkMuted,
+                        color: _inkMuted(context),
                       ),
                     ),
                   ),
@@ -154,12 +166,12 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: const Text(
+                    child: Text(
                       'Sign Up',
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
-                        color: _kInkDark,
+                        color: _inkDark(context),
                       ),
                     ),
                   ),
@@ -192,18 +204,18 @@ class WelcomeScreen extends StatelessWidget {
                                   alignment: Alignment.centerLeft,
                                 ),
                                 const SizedBox(height: 28),
-                                const Text(
+                                Text(
                                   'The chat platform built for\nPusat Tuisyen Arena Matriks',
                                   style: TextStyle(
                                     fontSize: 30,
                                     height: 1.15,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: -0.6,
-                                    color: _kInkDark,
+                                    color: _inkDark(context),
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const Text(
+                                Text(
                                   'One organised space to connect students, '
                                   'teachers, and parents — inside clear '
                                   'working hours, with nothing lost in a '
@@ -211,7 +223,7 @@ class WelcomeScreen extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 15,
                                     height: 1.5,
-                                    color: _kInkMuted,
+                                    color: _inkMuted(context),
                                   ),
                                 ),
                                 const SizedBox(height: 28),
@@ -264,12 +276,14 @@ class WelcomeScreen extends StatelessWidget {
                                             );
                                           },
                                           style: OutlinedButton.styleFrom(
-                                            foregroundColor: _kInkDark,
-                                            side: const BorderSide(
-                                              color: _kBorder,
+                                            foregroundColor: _inkDark(context),
+                                            side: BorderSide(
+                                              color: _borderColor(context),
                                               width: 1.4,
                                             ),
-                                            backgroundColor: Colors.white,
+                                            backgroundColor: Theme.of(
+                                              context,
+                                            ).cardColor,
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
                                                   BorderRadius.circular(10),
@@ -430,7 +444,9 @@ class WelcomeScreen extends StatelessWidget {
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.4,
-                                color: _kInkMuted.withValues(alpha: 0.8),
+                                color: _inkMuted(
+                                  context,
+                                ).withValues(alpha: 0.8),
                               ),
                             ),
                           ),
@@ -440,7 +456,10 @@ class WelcomeScreen extends StatelessWidget {
                               children: [
                                 for (var i = 0; i < _offerings.length; i++) ...[
                                   if (i > 0)
-                                    const Divider(height: 1, color: _kBorder),
+                                    Divider(
+                                      height: 1,
+                                      color: _borderColor(context),
+                                    ),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 18,
@@ -451,7 +470,7 @@ class WelcomeScreen extends StatelessWidget {
                                       children: [
                                         Icon(
                                           _offerings[i].icon,
-                                          color: _kInkDark,
+                                          color: _inkDark(context),
                                           size: 22,
                                         ),
                                         const SizedBox(width: 16),
@@ -462,19 +481,19 @@ class WelcomeScreen extends StatelessWidget {
                                             children: [
                                               Text(
                                                 _offerings[i].title,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w700,
-                                                  color: _kInkDark,
+                                                  color: _inkDark(context),
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
                                                 _offerings[i].description,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 13.5,
                                                   height: 1.5,
-                                                  color: _kInkMuted,
+                                                  color: _inkMuted(context),
                                                 ),
                                               ),
                                             ],
@@ -493,9 +512,12 @@ class WelcomeScreen extends StatelessWidget {
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               border: Border(
-                                top: BorderSide(color: _kBorder, width: 1),
+                                top: BorderSide(
+                                  color: _borderColor(context),
+                                  width: 1,
+                                ),
                               ),
                             ),
                             child: Column(
@@ -523,7 +545,9 @@ class WelcomeScreen extends StatelessWidget {
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: _kInkMuted.withValues(alpha: 0.8),
+                                    color: _inkMuted(
+                                      context,
+                                    ).withValues(alpha: 0.8),
                                   ),
                                 ),
                               ],
@@ -562,9 +586,9 @@ class _SocialButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: _kBorder, width: 1.4),
+            border: Border.all(color: _borderColor(context), width: 1.4),
           ),
-          child: FaIcon(link.icon, color: _kInkDark, size: 16),
+          child: FaIcon(link.icon, color: _inkDark(context), size: 16),
         ),
       ),
     );

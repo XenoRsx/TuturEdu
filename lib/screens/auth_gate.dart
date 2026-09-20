@@ -12,7 +12,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart' show kBrandBlue, kAppBackground;
 import '../utils/push_notifications.dart';
 import 'welcome_screen.dart';
 import 'teacher_dashboard.dart';
@@ -87,11 +86,6 @@ class _SplashLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: kAppBackground,
-      body: Center(
-        child: CircularProgressIndicator(color: kBrandBlue),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

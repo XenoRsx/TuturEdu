@@ -293,6 +293,9 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Delete Message (soft-delete — sender within 15 minutes, or Admin any time — see BLUEPRINT.md section 5.16)
 - [x] Parent Module supports 2+ children per parent (`childUids` array, child picker in Child Overview, "Manage Children" in Admin — see BLUEPRINT.md section 5.9)
 - [x] MFA — Email OTP mandatory for every role on every fresh sign-in (see BLUEPRINT.md section 5.17), branded HTML email, confirmed working end-to-end
+- [x] Shared UI/UX design system (`lib/widgets/`) — real dashboards for Teacher/Student/Parent (stat row + quick actions), refined chat bubbles, visual percentage bars for Attendance/Class Performance, consistent cards/empty states app-wide
+- [x] Dark Mode — Light/Dark/System toggle in Settings, saved to the account (`users/{uid}.themeMode`), applied instantly across devices
+- [x] Claymorphism visual style — soft, puffy "clay" surfaces (dual light+dark shadow) across the app's shared widget layer, accent buttons/icons stay solid brand color
 
 ## Author
 

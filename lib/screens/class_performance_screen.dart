@@ -12,6 +12,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/app_card.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/stat_bar.dart';
 
 // Percentage below which a student counts as "Safe" / "At-Risk" / "Barred".
 const int _kSafeMinPercentage = 70;
@@ -311,7 +314,9 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
                     return Center(
                       child: Text(
                         'No warning letters sent yet.',
-                        style: TextStyle(color: Colors.grey.shade600),
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
                       ),
                     );
                   }
@@ -357,26 +362,10 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
       body: _loadingSubjects
           ? const Center(child: CircularProgressIndicator())
           : _teacherSubjects.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.menu_book_outlined,
-                      size: 56,
-                      color: Colors.grey.shade300,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'No subjects assigned to your account yet. Ask an '
-                      'Admin to set your subjects first.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
+          ? const EmptyState(
+              icon: Icons.menu_book_outlined,
+              title: 'No subjects assigned yet',
+              subtitle: 'Ask an Admin to set your subjects first.',
             )
           : Column(
               children: [
@@ -422,22 +411,9 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
         final students = studentsSnapshot.data!.docs;
 
         if (students.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.people_outline,
-                  size: 56,
-                  color: Colors.grey.shade300,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'No students enrolled in this subject yet.',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ],
-            ),
+          return const EmptyState(
+            icon: Icons.people_outline,
+            title: 'No students enrolled in this subject yet.',
           );
         }
 
@@ -468,55 +444,58 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
             return Column(
               children: [
                 Container(
-                  width: double.infinity,
                   margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
+                  child: AppCard(
                     color: Colors.green.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Colors.green.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        healthScore == null
-                            ? 'No data yet'
-                            : '${healthScore.toStringAsFixed(0)}%',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                    child: Column(
+                      children: [
+                        Text(
+                          healthScore == null
+                              ? 'No data yet'
+                              : '${healthScore.toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
                         ),
-                      ),
-                      const Text(
-                        'Class Health Score',
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: ['safe', 'at_risk', 'barred'].map((cat) {
-                          return Column(
-                            children: [
-                              Text(
-                                '${categoryCounts[cat]}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                  color: _categoryColor(cat),
+                        Text(
+                          'Class Health Score',
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
+                        ),
+                        if (healthScore != null) ...[
+                          const SizedBox(height: 10),
+                          LinearStatBar(
+                            value: healthScore / 100,
+                            color: Colors.green,
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: ['safe', 'at_risk', 'barred'].map((cat) {
+                            return Column(
+                              children: [
+                                Text(
+                                  '${categoryCounts[cat]}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                    color: _categoryColor(cat),
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                _categoryLabel(cat),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ],
+                                Text(
+                                  _categoryLabel(cat),
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Expanded(
@@ -532,9 +511,9 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
                       final isCritical =
                           percentage != null && trend == 'critical';
 
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: Padding(
+                        child: AppCard(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 10,
@@ -618,7 +597,9 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
                                             'Not graded yet',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey.shade500,
+                                              color: Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall?.color,
                                             ),
                                           ),
                                       ],
@@ -642,6 +623,16 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
                                   ),
                                 ],
                               ),
+                              if (percentage != null) ...[
+                                const SizedBox(height: 8),
+                                LinearStatBar(
+                                  value: percentage / 100,
+                                  color: _categoryColor(
+                                    _categoryFor(percentage),
+                                  ),
+                                  height: 5,
+                                ),
+                              ],
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Row(

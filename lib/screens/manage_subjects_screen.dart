@@ -14,6 +14,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/empty_state.dart';
 
 class ManageSubjectsScreen extends StatefulWidget {
   const ManageSubjectsScreen({super.key});
@@ -229,7 +230,9 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -254,12 +257,18 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
                         flex: 3,
                         child: DropdownButtonFormField<String>(
                           initialValue: _selectedSubject,
-                          decoration: const InputDecoration(labelText: 'Subject'),
+                          decoration: const InputDecoration(
+                            labelText: 'Subject',
+                          ),
                           isExpanded: true,
                           items: _subjectOptions
-                              .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                              .map(
+                                (s) =>
+                                    DropdownMenuItem(value: s, child: Text(s)),
+                              )
                               .toList(),
-                          onChanged: (value) => setState(() => _selectedSubject = value),
+                          onChanged: (value) =>
+                              setState(() => _selectedSubject = value),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -270,9 +279,13 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
                           decoration: const InputDecoration(labelText: 'Level'),
                           isExpanded: true,
                           items: _levelOptions
-                              .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                              .map(
+                                (l) =>
+                                    DropdownMenuItem(value: l, child: Text(l)),
+                              )
                               .toList(),
-                          onChanged: (value) => setState(() => _selectedLevel = value),
+                          onChanged: (value) =>
+                              setState(() => _selectedLevel = value),
                         ),
                       ),
                     ],
@@ -322,7 +335,8 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
                 hintText: 'Search subjects...',
                 prefixIcon: Icon(Icons.search),
               ),
-              onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+              onChanged: (value) =>
+                  setState(() => _searchQuery = value.toLowerCase()),
             ),
           ),
           const SizedBox(height: 8),
@@ -341,27 +355,19 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
                 }
 
                 final subjects = snapshot.data!.docs.where((doc) {
-                  final name = ((doc.data() as Map<String, dynamic>)['name'] ?? '')
-                      .toString()
-                      .toLowerCase();
+                  final name =
+                      ((doc.data() as Map<String, dynamic>)['name'] ?? '')
+                          .toString()
+                          .toLowerCase();
                   return name.contains(_searchQuery);
                 }).toList();
 
                 if (subjects.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.menu_book_outlined, size: 56, color: Colors.grey.shade300),
-                        const SizedBox(height: 12),
-                        Text(
-                          _searchQuery.isEmpty
-                              ? 'No subjects added yet.'
-                              : 'No subjects match your search.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
+                  return EmptyState(
+                    icon: Icons.menu_book_outlined,
+                    title: _searchQuery.isEmpty
+                        ? 'No subjects added yet.'
+                        : 'No subjects match your search.',
                   );
                 }
 
@@ -374,23 +380,38 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
                     final name = data['name'] ?? '';
 
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: Colors.blue.shade50,
-                          child: const Icon(Icons.menu_book, color: Colors.blue),
+                          child: const Icon(
+                            Icons.menu_book,
+                            color: Colors.blue,
+                          ),
                         ),
-                        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Text(
+                          name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: Colors.blue,
+                              ),
                               tooltip: 'Edit',
                               onPressed: () => _editSubject(doc.id, name),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
                               tooltip: 'Delete',
                               onPressed: () => _deleteSubject(doc.id, name),
                             ),

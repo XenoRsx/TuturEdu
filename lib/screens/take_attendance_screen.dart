@@ -266,7 +266,11 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                       ? Center(
                           child: Text(
                             'No students enrolled in this subject yet.',
-                            style: TextStyle(color: Colors.grey.shade600),
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.color,
+                            ),
                           ),
                         )
                       : Column(
@@ -283,9 +287,11 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                                 children: [
                                   Text(
                                     '${_students.length} student(s)',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12.5,
-                                      color: Colors.black54,
+                                      color: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall?.color,
                                     ),
                                   ),
                                   Row(

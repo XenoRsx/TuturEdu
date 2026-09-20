@@ -798,6 +798,42 @@ Push Notifications on/off:
      daftar token - kalau user dah matikan dari Settings, login semula pada
      peranti yang sama TAK akan diam-diam aktifkan balik
 
+Appearance (Light/Dark/System, rujuk juga nota UI/UX design system di 4.1):
+   → RadioGroup 3 pilihan → update users/{uid}.themeMode ("light" | "dark" |
+     "system", default "system" bila field tiada)
+   → Simpan pada AKAUN (Firestore), BUKAN storan tempatan peranti - pilihan
+     ikut user ke mana-mana peranti dia log masuk, sebab tu perlu satu
+     listener global, bukan setakat dalam SettingsScreen sahaja
+   → main.dart's _MyAppState mendengar FirebaseAuth.authStateChanges(): bila
+     user log masuk, subscribe terus pada users/{uid} snapshot dan set
+     themeModeNotifier (ValueNotifier<ThemeMode> global) ikut field
+     themeMode - jadi tema terpakai serta-merta lepas login, bukan tunggu
+     SettingsScreen dibuka. Log keluar → reset balik ke ThemeMode.system.
+   → MaterialApp bina KEDUA-DUA `theme:` (light) dan `darkTheme:` (dark) dari
+     satu fungsi _buildTheme(Brightness) yang sama - ColorScheme.fromSeed
+     dengan brightness berbeza, warna scaffold/card/input disesuaikan ikut
+     brightness (bukan cuma invert automatik)
+   → lib/utils/theme_preference.dart: mapping String↔ThemeMode dikongsi
+     antara main.dart (baca) dan settings_screen.dart (tulis)
+   → WelcomeScreen/LoginScreen/RegisterScreen/MfaVerificationScreen ikut
+     tema SISTEM peranti (bukan pilihan akaun - akaun belum diketahui
+     sebelum login), sebab themeModeNotifier default ThemeMode.system bila
+     signed out. Nota (dijumpai 2026-09, laporan pengguna): skrin-skrin ni
+     asalnya guna warna literal tetap (kInkDark/kInkMuted terus) - bila
+     sistem bertukar dark, background jadi gelap tapi warna teks/kad tetap
+     terang → pertentangan visual. Dibetulkan guna Theme.of(context)/helper
+     _inkDark()/_inkMuted()/_borderColor() (welcome_screen.dart) supaya ikut
+     brightness sebenar. Panel navy "About the Centre" dalam WelcomeScreen
+     KEKAL warna tetap (bg gelap + teks putih) - sengaja, bukan bug.
+   → Nota kedua (bug quick reply chip yang sama dilaporkan): background
+     opaque cetek (Colors.xxx.shade50/100, BUKAN .withValues(alpha:...))
+     TAK bertukar warna ikut tema - kalau teks di atasnya guna warna
+     default/theme-inherited, ia jadi tak nampak dalam dark mode (teks
+     terang di atas bg terang-tetap). Disemak & dibetulkan merentas hampir
+     semua skrin (chat_screen.dart's quick reply chips, group_info_screen.dart,
+     dan lain-lain) - rujuk CLAUDE.md untuk pattern yang betul sebelum
+     tambah UI baru guna warna tetap.
+
 Log Out:
    → unregisterPushToken() → FirebaseAuth.instance.signOut() →
      pushAndRemoveUntil ke LoginScreen (bersihkan stack, rujuk 5.13)
@@ -1013,17 +1049,29 @@ lib/
 │   ├── child_overview_screen.dart       // ✅ Parent: tab Attendance + Performance anak (read-only)
 │   ├── parent_warning_letters_screen.dart // ✅ Parent: senarai warning letter anak, Mark Read
 │   ├── admin_reports_screen.dart        // ✅ Admin: statistik sistem (count aggregation)
-│   └── settings_screen.dart             // ✅ Semua role: profile, password, push toggle, leave dates (Teacher), logout, delete account
-└── utils/
-    ├── office_hours.dart
-    ├── unread_badge.dart               // ✅ conditional export (web/stub)
-    ├── unread_badge_stub.dart          // ✅ no-op untuk platform bukan web
-    ├── unread_badge_web.dart           // ✅ Badging API via dart:js_interop
-    ├── file_validator.dart             // ✅ rujuk Seksyen 8
-    ├── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
-    ├── push_notifications.dart         // ✅ daftar/buang token FCM, rujuk Seksyen 5.12
-    ├── notification_sounds.dart        // ✅ 3 pilihan bunyi + main audio, rujuk Seksyen 5.15
-    └── phishing_detector.dart          // ✅ heuristic URL scan (client-side), rujuk Seksyen 11
+│   └── settings_screen.dart             // ✅ Semua role: profile, password, push toggle, Appearance (Light/Dark/System), leave dates (Teacher), logout, delete account
+├── utils/
+│   ├── office_hours.dart
+│   ├── unread_badge.dart               // ✅ conditional export (web/stub)
+│   ├── unread_badge_stub.dart          // ✅ no-op untuk platform bukan web
+│   ├── unread_badge_web.dart           // ✅ Badging API via dart:js_interop
+│   ├── file_validator.dart             // ✅ rujuk Seksyen 8
+│   ├── quiz_theme.dart                 // ✅ palet warna/bentuk gaya Kahoot/Wayground untuk module Quiz
+│   ├── push_notifications.dart         // ✅ daftar/buang token FCM, rujuk Seksyen 5.12
+│   ├── notification_sounds.dart        // ✅ 3 pilihan bunyi + main audio, rujuk Seksyen 5.15
+│   ├── phishing_detector.dart          // ✅ heuristic URL scan (client-side), rujuk Seksyen 11
+│   ├── auth_error_dialog.dart          // ✅ mesej ralat FirebaseAuth mesra-pengguna, rujuk 5.1/5.17
+│   └── theme_preference.dart           // ✅ mapping String↔ThemeMode dikongsi main.dart/settings_screen.dart, rujuk 5.14
+└── widgets/                             // ✅ lapisan design-system dikongsi (dibina semasa UI/UX polish pass - rujuk 4.1)
+    ├── app_card.dart                    // kad putih/gelap bershadow lembut, gantikan Card/Container hand-roll
+    ├── icon_tile.dart                   // kotak ikon bertona untuk baris aksi (bukan avatar orang)
+    ├── stat_tile.dart                   // kotak nombor+label bertona untuk baris stat dashboard
+    ├── section_label.dart               // caption kecil untuk kumpulkan seksyen (Settings/Admin Reports)
+    ├── empty_state.dart                 // placeholder "tiada apa lagi" (ikon+tajuk+subtajuk)
+    ├── stat_bar.dart                    // LinearStatBar - bar peratusan tipis untuk Attendance/Class Performance
+    ├── menu_row.dart                    // baris boleh tekan (IconTile + tajuk/subtajuk + chevron)
+    ├── dashboard_header.dart            // header dashboard (stat row + grid aksi pantas), rujuk chat_list_screen.dart's homeHeader
+    └── message_bubble.dart              // shell bubble chat (shadow + sudut tak simetri), extract dari chat_screen.dart
 
 assets/
 ├── images/
@@ -1297,6 +1345,9 @@ match /quizAttempts/{attemptId} {
 - [x] Delete Message (soft-delete, sender 15 minit / Admin bila-bila, rujuk Seksyen 5.16)
 - [x] MFA — Email OTP wajib untuk semua role pada setiap sign-in baharu (rujuk Seksyen 5.17) — secret Gmail App Password dah disetup & disahkan berfungsi (email OTP branded HTML diterima sebenar semasa testing)
 - [x] Parent Module sokong 2+ anak setiap parent (`childUids` array, dropdown pemilih anak di ChildOverviewScreen, "Manage Children" di Admin, rujuk Seksyen 5.9)
+- [x] UI/UX design system (`lib/widgets/`) — dashboard sebenar untuk Teacher/Student/Parent (stat row + quick actions, bukan setakat AppBar icons), bubble chat bershadow, bar peratusan visual untuk Attendance/Class Performance, kad+empty-state konsisten merentas app (rujuk Seksyen 7)
+- [x] Dark Mode — toggle Light/Dark/System dalam Settings, disimpan pada akaun (`users/{uid}.themeMode`), terpakai serta-merta lepas login merentas peranti (rujuk Seksyen 5.14)
+- [x] Claymorphism — gaya visual seluruh app ditukar ke permukaan "clay" lembut/puffy (dual shadow gelap+terang via `main.dart`'s `clayShadows()`, bukan flat shadow tunggal), warna surface (`kClaySurfaceLight/Dark`) sengaja hampir sama dengan background (`kClayBaseLight/Dark`) supaya kesan 3D datang dari shadow, bukan kontras warna; butang/ikon aksen kekal warna pekat blue/green. Diterapkan melalui lapisan `lib/widgets/` (AppCard, IconTile, StatTile, MenuRow, MessageBubble) supaya merentas hampir semua skrin secara automatik. Skrin gameplay Quiz (attempt/host/live/join/leaderboard) TAK disentuh - kekal gaya Kahoot sendiri.
 
 ---
 

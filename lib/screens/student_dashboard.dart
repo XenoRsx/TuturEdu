@@ -6,6 +6,8 @@
 // chat) or "Join a Quiz" (enter a Live Session join code).
 
 import 'package:flutter/material.dart';
+import '../widgets/dashboard_header.dart';
+import '../widgets/stat_tile.dart';
 import 'attendance_overview_screen.dart';
 import 'chat_list_screen.dart';
 import 'join_quiz_screen.dart';
@@ -104,10 +106,63 @@ class StudentDashboard extends StatelessWidget {
     );
   }
 
+  Widget _buildHeader(
+    BuildContext context, {
+    required int totalUnread,
+    required int totalChats,
+    required int totalGroups,
+  }) {
+    return DashboardHeader(
+      stats: [
+        StatTile(value: '$totalUnread', label: 'Unread', color: Colors.blue),
+        StatTile(
+          value: '$totalChats',
+          label: 'Total Chats',
+          color: Colors.green,
+        ),
+        StatTile(
+          value: '$totalGroups',
+          label: 'Groups',
+          color: Colors.deepPurple,
+        ),
+      ],
+      actions: [
+        QuickAction(
+          icon: Icons.assignment_outlined,
+          label: 'Self-Paced Quizzes',
+          color: Colors.blue,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SelfPacedQuizListScreen()),
+          ),
+        ),
+        QuickAction(
+          icon: Icons.fact_check_outlined,
+          label: 'My Attendance',
+          color: Colors.green,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AttendanceOverviewScreen()),
+          ),
+        ),
+        QuickAction(
+          icon: Icons.quiz_outlined,
+          label: 'Join a Quiz',
+          color: Colors.deepPurple,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const JoinQuizScreen()),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChatListScreen(
       appBarColor: Colors.blue,
+      homeHeader: _buildHeader,
       extraActions: [
         IconButton(
           tooltip: 'Settings',
@@ -118,45 +173,6 @@ class StudentDashboard extends StatelessWidget {
           ),
         ),
       ],
-      tabBarTrailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: 'Self-Paced Quizzes',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SelfPacedQuizListScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.assignment_outlined, color: Colors.white),
-          ),
-          IconButton(
-            tooltip: 'My Attendance',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AttendanceOverviewScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.fact_check_outlined, color: Colors.white),
-          ),
-          IconButton(
-            tooltip: 'Join a Quiz',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const JoinQuizScreen()),
-              );
-            },
-            icon: const Icon(Icons.quiz_outlined, color: Colors.white),
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openMenu(context),
         backgroundColor: Colors.blue,

@@ -246,7 +246,9 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
           return Center(
             child: Text(
               'No attendance records yet.',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
             ),
           );
         }
@@ -286,9 +288,11 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                       color: isLow ? Colors.red : Colors.orange,
                     ),
                   ),
-                  const Text(
+                  Text(
                     'Attendance Rate',
-                    style: TextStyle(color: Colors.black54),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -361,7 +365,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
       return Center(
         child: Text(
           'No subjects enrolled yet.',
-          style: TextStyle(color: Colors.grey.shade600),
+          style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
         ),
       );
     }

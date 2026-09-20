@@ -15,6 +15,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../widgets/empty_state.dart';
 import 'link_parent_child_screen.dart';
 
 class ManageUsersScreen extends StatefulWidget {
@@ -377,22 +378,9 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 }).toList();
 
                 if (users.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          size: 56,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No users found.',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                      ],
-                    ),
+                  return const EmptyState(
+                    icon: Icons.people_outline,
+                    title: 'No users found.',
                   );
                 }
 

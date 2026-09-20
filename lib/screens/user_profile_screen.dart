@@ -49,7 +49,8 @@ class UserProfileScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatScreen(chatId: chatId, otherUserName: name, otherUserUid: uid),
+        builder: (_) =>
+            ChatScreen(chatId: chatId, otherUserName: name, otherUserUid: uid),
       ),
     );
   }
@@ -90,7 +91,11 @@ class UserProfileScreen extends StatelessWidget {
                   backgroundColor: color.withValues(alpha: 0.15),
                   child: Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: color),
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
                 ),
               ),
@@ -98,13 +103,19 @@ class UserProfileScreen extends StatelessWidget {
               Center(
                 child: Text(
                   name,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
               Center(
                 child: Chip(
-                  label: Text(role, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                  label: Text(
+                    role,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
                   backgroundColor: color,
                   visualDensity: VisualDensity.compact,
                 ),
@@ -116,13 +127,21 @@ class UserProfileScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _infoRow(Icons.email_outlined, 'Email', email.isNotEmpty ? email : '-'),
+                      _infoRow(
+                        context,
+                        Icons.email_outlined,
+                        'Email',
+                        email.isNotEmpty ? email : '-',
+                      ),
                       if (role == 'Teacher' || role == 'Student') ...[
                         const Divider(height: 24),
                         _infoRow(
+                          context,
                           Icons.menu_book_outlined,
                           'Subjects',
-                          subjects.isNotEmpty ? subjects.join(', ') : 'No subjects assigned yet',
+                          subjects.isNotEmpty
+                              ? subjects.join(', ')
+                              : 'No subjects assigned yet',
                         ),
                       ],
                     ],
@@ -151,17 +170,23 @@ class UserProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String value) {
+  Widget _infoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    final muted = Theme.of(context).textTheme.bodySmall?.color;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: Colors.grey.shade600),
+        Icon(icon, size: 20, color: muted),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600)),
+              Text(label, style: TextStyle(fontSize: 11.5, color: muted)),
               const SizedBox(height: 2),
               Text(value, style: const TextStyle(fontSize: 14.5)),
             ],

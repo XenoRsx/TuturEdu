@@ -14,11 +14,23 @@
 // createUserWithEmailAndPassword actually run.
 
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import '../main.dart' show kBrandBlue, kInkDark, kInkMuted;
+import '../main.dart' show kBrandBlue;
 import 'welcome_screen.dart';
+
+// ----- DEBUG BYPASS (testing only) -----
+// Set to true to skip sending/verifying the email OTP entirely and jump
+// straight to the destination dashboard - saves waiting on an email every
+// single sign-in while developing locally.
+// SAFE: since it's wrapped in kDebugMode (same pattern as office_hours.dart's
+// debugForceOpen), this flag automatically becomes a no-op in a production
+// build (flutter build web / apk --release), even if you forget to flip it
+// back before deploying.
+bool debugBypassMfa = false;
+// -------------------------------------------------
 
 class MfaVerificationScreen extends StatefulWidget {
   final Widget destination;
@@ -43,6 +55,17 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    if (kDebugMode && debugBypassMfa) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => widget.destination),
+          (route) => false,
+        );
+      });
+      return;
+    }
     _sendCode();
   }
 
@@ -142,12 +165,12 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                   color: kBrandBlue,
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Check your email',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: kInkDark,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -156,7 +179,10 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                       ? 'Sending a 6-digit code to $email…'
                       : 'We sent a 6-digit code to $email',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 13.5, color: kInkMuted),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
                 ),
                 const SizedBox(height: 28),
                 TextField(
@@ -223,7 +249,6 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                 ),
                 TextButton(
                   onPressed: _cancel,
-                  style: TextButton.styleFrom(foregroundColor: kInkMuted),
                   child: const Text('Cancel and sign out'),
                 ),
               ],
