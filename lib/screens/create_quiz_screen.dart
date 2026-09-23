@@ -1,9 +1,19 @@
 // lib/screens/create_quiz_screen.dart
 //
-// Teacher screen: create a multiple-choice quiz for one of the subjects
-// they teach (see BLUEPRINT.md section 9). Each question has 4 options, one
-// marked correct, a per-question time limit (used in Live Session mode)
-// and a points value. Saves to quizzes/{quizId} + a questions subcollection.
+// Teacher screen: create OR edit a multiple-choice quiz for one of the
+// subjects they teach (see BLUEPRINT.md section 9). Each question has 4
+// options, one marked correct, a per-question time limit (used in Live
+// Session mode) and a points value. Saves to quizzes/{quizId} + a questions
+// subcollection.
+//
+// Edit mode (widget.quizId != null, reached from quiz_list_screen.dart's
+// Edit icon) loads the existing quiz doc + its questions subcollection in
+// _init() and pre-populates every field/draft. Saving in edit mode always
+// fully replaces the questions subcollection (delete-all-then-re-add) rather
+// than diffing individual question docs - simpler and matches how create
+// already writes questions. No firestore.rules change was needed: the
+// quizzes/{quizId} rule already lets the creating teacher update/delete
+// their own quiz and its questions subcollection.
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -30,7 +40,12 @@ class _QuestionDraft {
 }
 
 class CreateQuizScreen extends StatefulWidget {
-  const CreateQuizScreen({super.key});
+  // Null = create a new quiz (default). Non-null = edit an existing quiz -
+  // see _init() below, which loads the quiz doc + its questions subcollection
+  // and pre-populates every field/draft before the form is shown.
+  final String? quizId;
+
+  const CreateQuizScreen({super.key, this.quizId});
 
   @override
   State<CreateQuizScreen> createState() => _CreateQuizScreenState();
@@ -40,11 +55,13 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
   final _titleController = TextEditingController();
   final List<_QuestionDraft> _questions = [_QuestionDraft()];
 
-  bool _loadingSubjects = true;
+  bool _loading = true;
   bool _saving = false;
   List<String> _teacherSubjects = [];
   String? _selectedSubject;
   String _mode = 'live'; // 'live' | 'self_paced' | 'both'
+
+  bool get _isEditing => widget.quizId != null;
 
   // Self-Paced retake + due date (see BLUEPRINT.md section 9.6a) - maxAttempts
   // defaults to 1 (no retake) when _allowRetake is off; dueDate is optional.
@@ -81,7 +98,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
   @override
   void initState() {
     super.initState();
-    _loadTeacherSubjects();
+    _init();
   }
 
   @override
@@ -93,22 +110,88 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
     super.dispose();
   }
 
-  Future<void> _loadTeacherSubjects() async {
+  Future<void> _init() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
 
-    final doc = await FirebaseFirestore.instance
+    final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(currentUser.uid)
         .get();
+    final subjects = List<String>.from(userDoc.data()?['subjects'] ?? []);
+    String? selectedSubject = subjects.isNotEmpty ? subjects.first : null;
 
-    final subjects = List<String>.from(doc.data()?['subjects'] ?? []);
+    if (widget.quizId != null) {
+      final quizDoc = await FirebaseFirestore.instance
+          .collection('quizzes')
+          .doc(widget.quizId)
+          .get();
+      final quizData = quizDoc.data();
+
+      if (quizData != null) {
+        _titleController.text = quizData['title'] ?? '';
+        _mode = quizData['mode'] ?? 'live';
+        final maxAttempts = quizData['maxAttempts'] ?? 1;
+        _allowRetake = maxAttempts > 1;
+        _maxAttempts = _maxAttemptsOptions.contains(maxAttempts)
+            ? maxAttempts
+            : 2;
+        final dueTimestamp = quizData['dueDate'];
+        _dueDate = dueTimestamp is Timestamp ? dueTimestamp.toDate() : null;
+
+        // Quiz's subject may no longer be one of the teacher's currently
+        // assigned subjects (e.g. an Admin/Teacher later removed it) - keep
+        // it selectable anyway so the dropdown's value always matches an
+        // item, rather than crashing or silently losing the quiz's subject.
+        final quizSubject = quizData['subjectLevel'] as String?;
+        if (quizSubject != null) {
+          selectedSubject = quizSubject;
+          if (!subjects.contains(quizSubject)) {
+            subjects.add(quizSubject);
+          }
+        }
+
+        final questionsSnapshot = await FirebaseFirestore.instance
+            .collection('quizzes')
+            .doc(widget.quizId)
+            .collection('questions')
+            .orderBy('order')
+            .get();
+
+        if (questionsSnapshot.docs.isNotEmpty) {
+          for (final q in _questions) {
+            q.dispose();
+          }
+          _questions.clear();
+          for (final doc in questionsSnapshot.docs) {
+            final data = doc.data();
+            final draft = _QuestionDraft();
+            draft.textController.text = data['text'] ?? '';
+            final options = List<String>.from(data['options'] ?? []);
+            for (
+              var i = 0;
+              i < draft.optionControllers.length && i < options.length;
+              i++
+            ) {
+              draft.optionControllers[i].text = options[i];
+            }
+            draft.correctIndex = data['correctIndex'] ?? 0;
+            draft.timeLimitSeconds = data['timeLimitSeconds'] ?? 20;
+            draft.points = data['points'] ?? 100;
+            _questions.add(draft);
+          }
+        }
+      }
+    }
 
     if (mounted) {
       setState(() {
         _teacherSubjects = subjects;
-        _selectedSubject = subjects.isNotEmpty ? subjects.first : null;
-        _loadingSubjects = false;
+        _selectedSubject = selectedSubject;
+        _loading = false;
       });
     }
   }
@@ -162,19 +245,36 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
     setState(() => _saving = true);
 
     try {
-      final quizRef = FirebaseFirestore.instance.collection('quizzes').doc();
+      final quizRef = _isEditing
+          ? FirebaseFirestore.instance.collection('quizzes').doc(widget.quizId)
+          : FirebaseFirestore.instance.collection('quizzes').doc();
       final batch = FirebaseFirestore.instance.batch();
 
-      batch.set(quizRef, {
+      final quizData = {
         'title': title,
         'subjectLevel': _selectedSubject,
         'createdBy': currentUser.uid,
-        'createdAt': FieldValue.serverTimestamp(),
         'mode': _mode,
         'questionCount': _questions.length,
         'maxAttempts': _allowRetake ? _maxAttempts : 1,
         'dueDate': _dueDate != null ? Timestamp.fromDate(_dueDate!) : null,
-      });
+      };
+
+      if (_isEditing) {
+        batch.update(quizRef, quizData);
+        // Always fully replace the questions subcollection rather than
+        // diff/merge individual question docs - simpler, and consistent
+        // with how the create flow already writes questions.
+        final existingQuestions = await quizRef.collection('questions').get();
+        for (final doc in existingQuestions.docs) {
+          batch.delete(doc.reference);
+        }
+      } else {
+        batch.set(quizRef, {
+          ...quizData,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       for (var i = 0; i < _questions.length; i++) {
         final q = _questions[i];
@@ -193,7 +293,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
       await batch.commit();
 
       if (mounted) {
-        _showSnack('Quiz created!');
+        _showSnack(_isEditing ? 'Quiz updated!' : 'Quiz created!');
         Navigator.pop(context);
       }
     } catch (e) {
@@ -207,7 +307,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Quiz'),
+        title: Text(_isEditing ? 'Edit Quiz' : 'Create Quiz'),
         backgroundColor: QuizTheme.primary,
       ),
       // Forces every descendant (TextField/TextFormField/ChoiceChip/
@@ -223,7 +323,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
         data: ThemeData.light(useMaterial3: true),
         child: Container(
           decoration: const BoxDecoration(gradient: QuizTheme.pageGradient),
-          child: _loadingSubjects
+          child: _loading
               ? const Center(child: CircularProgressIndicator())
               : _teacherSubjects.isEmpty
               ? Center(
@@ -481,7 +581,9 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                               )
                             : const Icon(Icons.save),
                         label: Text(
-                          _saving ? 'Saving...' : 'Save Quiz',
+                          _saving
+                              ? (_isEditing ? 'Updating...' : 'Saving...')
+                              : (_isEditing ? 'Update Quiz' : 'Save Quiz'),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,

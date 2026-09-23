@@ -220,6 +220,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _showSnack('Leave dates cleared.');
   }
 
+  // ----- My Subjects (Teacher self-service, see BLUEPRINT.md) -----
+  // Same subjectCatalog + checkbox-list pattern as manage_users_screen.dart's
+  // Admin-only "Edit Subjects", but scoped to _userRef (always the signed-in
+  // user's own doc) - a Teacher choosing their OWN subjects needs no extra
+  // Firestore rule, `users/{userId}` write already allows self-edit.
+  Future<void> _editMySubjects(List<String> currentSubjects) async {
+    final catalogSnapshot = await FirebaseFirestore.instance
+        .collection('subjectCatalog')
+        .orderBy('name')
+        .get();
+    final allSubjects = catalogSnapshot.docs
+        .map((doc) => (doc.data())['name'] as String? ?? '')
+        .where((name) => name.isNotEmpty)
+        .toList();
+
+    if (!mounted) return;
+
+    if (allSubjects.isEmpty) {
+      _showSnack(
+        'Subject catalog is empty. Ask an Admin to add subjects first.',
+      );
+      return;
+    }
+
+    final selected = Set<String>.from(currentSubjects);
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('My Subjects'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: allSubjects.map((subject) {
+                final checked = selected.contains(subject);
+                return CheckboxListTile(
+                  value: checked,
+                  title: Text(subject),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      if (value == true) {
+                        selected.add(subject);
+                      } else {
+                        selected.remove(subject);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await _userRef.update({'subjects': selected.toList()});
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ----- Appearance (Light/Dark/System, see BLUEPRINT.md) -----
   // Written to the account (not local device storage) so the choice follows
   // the user to any device they sign into - main.dart's authStateChanges()
@@ -354,6 +425,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           final leaveStart = (data['leaveStart'] as Timestamp?)?.toDate();
           final leaveEnd = (data['leaveEnd'] as Timestamp?)?.toDate();
           final themeMode = (data['themeMode'] as String?) ?? 'system';
+          final mySubjects = List<String>.from(data['subjects'] ?? []);
 
           return AbsorbPointer(
             absorbing: _busy,
@@ -489,6 +561,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onTap: _clearLeaveDates,
                           ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const SectionLabel('My Subjects'),
+                  AppCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.menu_book_outlined,
+                        color: kBrandBlue,
+                      ),
+                      title: Text(
+                        mySubjects.isEmpty
+                            ? 'No subjects selected yet'
+                            : mySubjects.join(', '),
+                      ),
+                      subtitle: const Text(
+                        'Subjects you teach - controls which chats/classes '
+                        'you can manage attendance, performance, and quizzes '
+                        'for.',
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _editMySubjects(mySubjects),
+                        child: const Text('Edit'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

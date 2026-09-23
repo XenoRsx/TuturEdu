@@ -487,6 +487,33 @@ Nota akaun Admin pertama: TIADA pilihan "Admin" dalam RegisterScreen
    3. Login semula — akan route ke AdminDashboard
 ```
 
+### 5.7a Aliran Teacher: Assign Subjects (Student & Diri Sendiri) (✅ Sudah dilaksanakan)
+
+```
+Teacher pilih subjek untuk MURID (bukan Admin sahaja lagi):
+   → Buka profil Student (chat AppBar / UserSearchScreen info icon)
+   → user_profile_screen.dart papar `_ProfileData` (gabung dokumen target +
+     dokumen viewer sendiri via satu FutureBuilder, untuk tahu `viewerRole`)
+   → Row "Subjects" ada butang "Edit" HANYA bila viewerRole == 'Teacher' DAN
+     role target == 'Student' (`canEditSubjects`)
+   → Dialog checkbox (senarai penuh dari subjectCatalog) → simpan terus ke
+     users/{studentUid}.subjects
+
+Teacher pilih subjek untuk DIRI SENDIRI:
+   → Settings → seksyen "My Subjects" (dalam blok `role == 'Teacher'` yang
+     sama dengan Leave/Holiday, rujuk 5.14)
+   → Dialog checkbox sama → update ke `_userRef` (dokumen sendiri, tiada
+     isu rules sebab Teacher memang boleh tulis dokumen sendiri)
+
+firestore.rules: `users/{userId}` write rule tambah satu klausa baru,
+digabung dengan helper `isTeacher()`:
+   isTeacher() && resource.data.role == 'Student' &&
+   request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subjects'])
+→ Teacher HANYA boleh tukar field `subjects` pada dokumen Student, tiada
+  field lain (nama, role, email, dsb.) — sama pattern field-restriction
+  macam `warningLetters.acknowledged`. Deployed & live.
+```
+
 ### 5.8 Aliran Attendance (✅ Sudah dilaksanakan)
 
 ```
@@ -1319,6 +1346,36 @@ match /quizAttempts/{attemptId} {
   - **Nota skop**: results ni HANYA untuk attempt Self-Paced (`quizAttempts`). Markah Live Session disimpan berasingan dalam `quizSessions/{sessionId}/participants` dan dah ada leaderboard real-time sendiri dalam `host_quiz_session_screen.dart` — tak digabung di sini.
 - **Firestore rules** (`quizAttempts`) dikemaskini supaya Teacher yang cipta quiz (bukan setakat student pemilik/Admin) boleh `read` (perlu untuk `quiz_results_screen.dart` query semua attempt untuk satu quiz) — guna `get()` ke `quizzes/{quizId}` (dari `resource.data.quizId` yang tersimpan pada setiap attempt doc) untuk sahkan `createdBy == request.auth.uid`.
 
+### 9.6b Edit Quiz (✅ dikodkan)
+
+- `create_quiz_screen.dart` kini terima param opsyenal `quizId` (`null` =
+  cipta baru, seperti sebelum ini; bukan-null = edit). `_init()` (gabungan
+  `_loadTeacherSubjects()` lama + logik load baru) fetch dokumen
+  `quizzes/{quizId}` DAN subcollection `questions` (`orderBy('order')`)
+  sebelum papar borang, isi semula `_titleController`, `_selectedSubject`,
+  `_mode`, `_allowRetake`/`_maxAttempts` (derive dari `maxAttempts > 1`),
+  `_dueDate`, dan GANTI senarai `_questions` default dengan draf dari setiap
+  dokumen soalan sedia ada (`text`/`options`/`correctIndex`/
+  `timeLimitSeconds`/`points`).
+  - Kalau `subjectLevel` quiz tu bukan salah satu subjek Teacher yang
+    tersimpan SEKARANG (contoh subjek tu dah dibuang), tetap ditambah ke
+    senarai dropdown supaya `DropdownButtonFormField`'s `initialValue`
+    sentiasa padan dengan satu item (elak assertion error), bukan hilang
+    senyap.
+- `_saveQuiz()` bercabang: mod edit guna `batch.update(quizRef, quizData)`
+  (tiada `createdAt`), padam SEMUA dokumen `questions` sedia ada dulu, lepas
+  tu tambah semula draf soalan terkini — sentiasa ganti sepenuhnya
+  subcollection `questions`, bukan diff/merge individu, sama macam flow
+  cipta baru.
+- AppBar title & label butang Save berubah ikut mod ("Create Quiz"/"Edit
+  Quiz", "Save Quiz"/"Update Quiz").
+- **Tiada perubahan `firestore.rules`** — rule `quizzes/{quizId}` sedia ada
+  (`allow update, delete: if request.auth.uid == resource.data.createdBy`)
+  dan rule subcollection `questions` yang sepadan dah pun benarkan Teacher
+  yang cipta quiz tu update/delete.
+- Masuk dari `quiz_list_screen.dart` — ikon Edit baru (`Icons.edit_outlined`)
+  pada setiap row quiz, buka `CreateQuizScreen(quizId: doc.id)`.
+
 ---
 
 ## 10. Status Keseluruhan Pembangunan
@@ -1359,6 +1416,9 @@ match /quizAttempts/{attemptId} {
 - [x] UI/UX design system (`lib/widgets/`) — dashboard sebenar untuk Teacher/Student/Parent (stat row + quick actions, bukan setakat AppBar icons), bubble chat bershadow, bar peratusan visual untuk Attendance/Class Performance, kad+empty-state konsisten merentas app (rujuk Seksyen 7)
 - [x] Dark Mode — toggle Light/Dark/System dalam Settings, disimpan pada akaun (`users/{uid}.themeMode`), terpakai serta-merta lepas login merentas peranti (rujuk Seksyen 5.14)
 - [x] Claymorphism — gaya visual seluruh app ditukar ke permukaan "clay" lembut/puffy (dual shadow gelap+terang via `main.dart`'s `clayShadows()`, bukan flat shadow tunggal), warna surface (`kClaySurfaceLight/Dark`) sengaja hampir sama dengan background (`kClayBaseLight/Dark`) supaya kesan 3D datang dari shadow, bukan kontras warna; butang/ikon aksen kekal warna pekat blue/green. Diterapkan melalui lapisan `lib/widgets/` (AppCard, IconTile, StatTile, MenuRow, MessageBubble) supaya merentas hampir semua skrin secara automatik. Skrin gameplay Quiz (attempt/host/live/join/leaderboard) TAK disentuh - kekal gaya Kahoot sendiri.
+- [x] Teacher assign subjek untuk Student (dari profil Student) + pilih subjek sendiri (dari Settings) — kedua-duanya Admin-only sebelum ini (rujuk Seksyen 5.7a)
+- [x] Interactive Quiz — Edit Quiz (ubah title/subjek/mod/retake/due-date/soalan pada quiz sedia ada, rujuk Seksyen 9.6b)
+- [x] "Bahasa Malaysia" ditukar nama jadi "Bahasa Melayu" dalam katalog Manage Subjects
 
 ---
 

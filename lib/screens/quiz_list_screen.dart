@@ -2,7 +2,10 @@
 //
 // Teacher screen: "My Quizzes" - lists quizzes this teacher created.
 // Tapping a quiz starts hosting a new Live Session for it (generates a
-// join code, opens HostQuizSessionScreen). See BLUEPRINT.md section 9.
+// join code, opens HostQuizSessionScreen). The Edit icon opens
+// CreateQuizScreen in edit mode (quizId passed through) to change an
+// existing quiz's title/subject/mode/questions/retake/due-date settings.
+// See BLUEPRINT.md section 9.
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -274,6 +277,20 @@ class QuizListScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              color: QuizTheme.primary,
+                            ),
+                            tooltip: 'Edit',
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    CreateQuizScreen(quizId: doc.id),
+                              ),
+                            ),
+                          ),
                           IconButton(
                             icon: const Icon(
                               Icons.delete_outline,

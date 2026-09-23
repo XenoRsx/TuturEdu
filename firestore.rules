@@ -18,13 +18,28 @@ service cloud.firestore {
              subject in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subjects;
     }
 
+    // Helper: check sama ada user semasa ialah Teacher
+    function isTeacher() {
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Teacher';
+    }
+
     // Collection: users
     // - Sesiapa yang dah login boleh READ (perlu untuk teacher list & role check)
     // - User boleh EDIT profile dia sendiri, ATAU Admin boleh edit/delete mana-mana user
+    // - Teacher turut boleh kemaskini field `subjects` SAHAJA pada dokumen
+    //   seorang Student (bukan field lain, bukan role selain Student) -
+    //   perlu untuk user_profile_screen.dart's "Edit Subjects" bila Teacher
+    //   tengok profile student (assign subjek terus, bukan setakat Admin).
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null &&
-                    (request.auth.uid == userId || isAdmin());
+                    (request.auth.uid == userId ||
+                     isAdmin() ||
+                     (isTeacher() &&
+                      resource.data.role == 'Student' &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subjects'])));
     }
 
     // Collection: subjectCatalog

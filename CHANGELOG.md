@@ -21,6 +21,23 @@ was committed.
 
 ### Added
 
+- **Edit Quiz** — `create_quiz_screen.dart` now doubles as an edit form (optional
+  `quizId` param): a new Edit icon in "My Quizzes" opens it pre-filled with the
+  existing quiz's title, subject, mode, retake/due-date settings, and every
+  question. Saving in edit mode fully replaces the questions subcollection
+  (delete-all-then-re-add) rather than diffing individual questions, matching
+  how create already writes them. No `firestore.rules` change was needed — the
+  existing `createdBy`-based update rule already covers it.
+- **Teacher subject assignment** — a Teacher viewing a Student's profile
+  (`user_profile_screen.dart`) now gets an Edit action on the Subjects row,
+  and can pick their own teaching subjects from a new "My Subjects" section in
+  Settings — both were Admin-only before. `firestore.rules`' `users/{userId}`
+  write rule gained an `isTeacher()`-gated clause that lets a Teacher update
+  ONLY the `subjects` field of a Student's doc (`diff().affectedKeys().hasOnly(['subjects'])`),
+  nothing else.
+- **"Bahasa Malaysia" renamed to "Bahasa Melayu"** in the Manage Subjects
+  catalog dropdown (`manage_subjects_screen.dart`) — only affects new catalog
+  entries going forward, not already-existing `subjectCatalog` documents.
 - **Self-Paced Quiz: retake, due date, and Teacher results** — teachers can
   now optionally allow retakes (choose a max attempt count) and/or set a due
   date when creating a Self-Paced quiz. Students see a "Retake Quiz" button

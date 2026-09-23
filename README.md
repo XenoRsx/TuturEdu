@@ -26,11 +26,13 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - On-Duty / Off-Duty Toggle — a teacher can manually go Off-Duty (e.g. sudden meeting, sick leave) to lock their chats even during scheduled office hours, live-synced to anyone with the chat open
 - Interactive Quiz — Live Session — Kahoot/Wayground-style: teacher creates a multiple-choice quiz and hosts a live session with a 6-digit join code; students join in real time, answer against a synced countdown timer, and see a final podium leaderboard
 - Interactive Quiz — Self-Paced — same quiz questions, attempted on the student's own time (no timer, no host), with an instant score + answer review afterward; teachers can optionally allow retakes (set a max attempts) and/or a due date, and view every enrolled student's result (completed/not attempted, score, attempts used) in one screen
+- Interactive Quiz — Edit Quiz — teachers can edit an existing quiz's title, subject, mode, retake/due-date settings, and questions (an Edit icon in "My Quizzes" opens the same create form pre-filled; saving fully replaces the questions subcollection)
 - Class Performance Overview — teacher picks a subject, sees a class health score and a Safe/At-Risk/Barred breakdown, grades each student (0–100), and gets an auto-computed trend (Steady/Dropping/Critical) based on the change since their last grade
 - Warning Letter — teacher can send a warning letter to a student's linked parent when their trend turns Critical, with a per-student sending history
 - Attendance — teacher takes attendance per subject/date (Present/Absent, "Mark All" shortcuts); student sees their attendance rate, a Safe/Low breakdown, and a low-attendance warning below 75%
 - Parent Module — Admin links a Parent account to one or more Student accounts (a parent can have 2+ children linked); the parent then gets a real chat-list dashboard (message any teacher), a read-only "My Child" view (attendance + performance, with a child picker when there's more than one), and a Warning Letters inbox covering all their children that they can mark as read
 - Admin Dashboard — manage user accounts (view, change role, fully delete — both Firestore profile and Firebase Auth account, via a Cloud Function), manage the subject/level catalog, and a Reports screen with live system-wide stats (users, chats, quizzes, attempts, warning letters)
+- Teacher Subject Assignment — a teacher can assign subjects directly to a student from that student's profile (previously Admin-only), and pick their own teaching subjects from Settings
 - Push Notifications — a Cloud Function sends a real push notification on new chat messages and new warning letters, delivered even when the app isn't open. Live on Web (VAPID key configured and deployed) — see BLUEPRINT.md 5.12.
 - Settings — every role gets Edit Profile, Change Password (re-authenticates first), a Push Notifications on/off toggle, a choice of 3 notification sounds, Log Out, and self-service Delete Account (re-authenticates, then removes their own Firestore profile and Firebase Auth account — no Cloud Function needed for deleting your *own* account, unlike Admin deleting someone else's). Teachers additionally get Leave/Holiday dates, which auto-lock their chats for that date range on top of the manual On-Duty/Off-Duty toggle.
 - Notification Sound — pick from 3 sounds in Settings ("Marimba" by default); plays on foreground pushes on every platform, and on background/system pushes on Android specifically (the sound files are bundled as Android raw resources and the Cloud Function sets them per-recipient — Web Push has no cross-browser way to customize background notification sound).
@@ -63,7 +65,7 @@ lib/
 │   ├── teacher_dashboard.dart        # = ChatListScreen configured for Teacher
 │   ├── parent_dashboard.dart         # = ChatListScreen configured for Parent
 │   ├── user_search_screen.dart       # Generic search: find a Teacher (Student/Parent) or Student (Teacher)
-│   ├── user_profile_screen.dart      # Read-only profile + "Message" button
+│   ├── user_profile_screen.dart      # Read-only profile + "Message" button; Teacher gets an Edit action on a Student's Subjects row
 │   ├── chat_screen.dart              # Real-time chat (1:1 and group), attachments, quick replies, office hour lock
 │   ├── chat_list_screen.dart         # Tabs (All/Individual/Groups) + unread badges + read receipts
 │   ├── create_group_chat_screen.dart # Teacher: create a group chat for a subject/class
@@ -75,7 +77,7 @@ lib/
 │   ├── link_parent_child_screen.dart # Admin: link a Parent account to a Student account
 │   ├── manage_subjects_screen.dart   # Admin: manage subject/level catalog
 │   ├── create_quiz_screen.dart       # Teacher: create a quiz (4-option questions)
-│   ├── quiz_list_screen.dart         # Teacher: "My Quizzes", start hosting a session
+│   ├── quiz_list_screen.dart         # Teacher: "My Quizzes", start hosting a session, edit/delete/view results
 │   ├── host_quiz_session_screen.dart # Teacher: join code, waiting room, control questions, leaderboard
 │   ├── join_quiz_screen.dart         # Student: enter a join code
 │   ├── live_quiz_play_screen.dart    # Student: play the quiz in real time, timer, leaderboard
@@ -88,7 +90,7 @@ lib/
 │   ├── child_overview_screen.dart    # Parent: read-only attendance + performance, child picker if 2+ linked
 │   ├── parent_warning_letters_screen.dart # Parent: warning letters for their child, mark as read
 │   ├── admin_reports_screen.dart     # Admin: system-wide stats (count aggregation queries)
-│   └── settings_screen.dart          # All roles: profile, password, push toggle, sound, leave dates (Teacher), logout, delete account
+│   └── settings_screen.dart          # All roles: profile, password, push toggle, sound, leave dates + own subjects (Teacher), logout, delete account
 └── utils/
     ├── office_hours.dart             # Business hour check logic
     ├── unread_badge.dart             # OS-level badge, conditional export (web/stub)
@@ -296,6 +298,8 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Shared UI/UX design system (`lib/widgets/`) — real dashboards for Teacher/Student/Parent (stat row + quick actions), refined chat bubbles, visual percentage bars for Attendance/Class Performance, consistent cards/empty states app-wide
 - [x] Dark Mode — Light/Dark/System toggle in Settings, saved to the account (`users/{uid}.themeMode`), applied instantly across devices
 - [x] Claymorphism visual style — soft, puffy "clay" surfaces (dual light+dark shadow) across the app's shared widget layer, accent buttons/icons stay solid brand color
+- [x] Teacher can assign subjects to a student (from the student's profile) and pick their own subjects (from Settings) — both previously Admin-only
+- [x] Interactive Quiz — Edit Quiz (change title/subject/mode/retake/due-date/questions on an existing quiz)
 
 ## Author
 

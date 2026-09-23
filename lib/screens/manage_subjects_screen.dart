@@ -27,7 +27,7 @@ class _ManageSubjectsScreenState extends State<ManageSubjectsScreen> {
   static const _otherOption = 'Other (type manually)';
 
   static const List<String> _subjectOptions = [
-    'Bahasa Malaysia',
+    'Bahasa Melayu',
     'English',
     'Mathematics',
     'Add Maths',
