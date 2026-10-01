@@ -14,6 +14,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/role_colors.dart';
+import '../widgets/user_avatar.dart';
 import 'chat_screen.dart';
 
 class _ProfileData {
@@ -123,19 +125,6 @@ class UserProfileScreen extends StatelessWidget {
     );
   }
 
-  Color _roleColor(String role) {
-    switch (role) {
-      case 'Teacher':
-        return Colors.green;
-      case 'Parent':
-        return Colors.orange;
-      case 'Admin':
-        return Colors.purple;
-      default:
-        return Colors.blue;
-    }
-  }
-
   String _generateChatId(String uid1, String uid2) {
     final ids = [uid1, uid2]..sort();
     return '${ids[0]}_${ids[1]}';
@@ -189,7 +178,7 @@ class UserProfileScreen extends StatelessWidget {
           final email = data['email'] ?? '';
           final role = data['role'] ?? 'Student';
           final subjects = List<String>.from(data['subjects'] ?? []);
-          final color = _roleColor(role);
+          final color = roleColor(role);
           final canEditSubjects =
               result.viewerRole == 'Teacher' && role == 'Student';
 
@@ -197,18 +186,7 @@ class UserProfileScreen extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             children: [
               Center(
-                child: CircleAvatar(
-                  radius: 44,
-                  backgroundColor: color.withValues(alpha: 0.15),
-                  child: Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : '?',
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
-                ),
+                child: UserAvatar(name: name, role: role, radius: 44),
               ),
               const SizedBox(height: 16),
               Center(

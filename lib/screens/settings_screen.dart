@@ -29,7 +29,10 @@ import '../utils/notification_sounds.dart';
 import '../utils/push_notifications.dart';
 import '../widgets/app_card.dart';
 import '../widgets/section_label.dart';
+import '../widgets/user_avatar.dart';
 import 'login_screen.dart';
+import 'student_announcements_screen.dart';
+import 'teacher_announcements_screen.dart';
 import 'welcome_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -435,18 +438,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 AppCard(
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: kBrandBlue.withValues(alpha: 0.15),
-                        child: Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : '?',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: kBrandBlue,
-                          ),
-                        ),
-                      ),
+                      UserAvatar(name: name, role: role, radius: 28),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
@@ -586,6 +578,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       trailing: TextButton(
                         onPressed: () => _editMySubjects(mySubjects),
                         child: const Text('Edit'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  const SectionLabel('Announcements'),
+                  AppCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.campaign_outlined,
+                        color: kBrandBlue,
+                      ),
+                      title: const Text('My Announcements'),
+                      subtitle: const Text(
+                        'Send a notice to every student in one of your '
+                        'subjects',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TeacherAnnouncementsScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                if (role == 'Student') ...[
+                  const SectionLabel('Announcements'),
+                  AppCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.campaign_outlined,
+                        color: kBrandBlue,
+                      ),
+                      title: const Text('Announcements'),
+                      subtitle: const Text('Notices from your teachers'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const StudentAnnouncementsScreen(),
+                        ),
                       ),
                     ),
                   ),

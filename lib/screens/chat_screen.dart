@@ -47,11 +47,19 @@ import '../utils/file_validator.dart';
 import '../utils/office_hours.dart';
 import '../utils/phishing_detector.dart';
 import '../widgets/app_card.dart';
+import '../utils/role_colors.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/message_bubble.dart';
 import 'full_image_screen.dart';
 import 'group_info_screen.dart';
 import 'user_profile_screen.dart';
+
+class _SenderInfo {
+  final String name;
+  final String? role;
+
+  const _SenderInfo(this.name, this.role);
+}
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -105,21 +113,25 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _participants = [];
   Map<String, dynamic> _lastRead = {};
 
-  // Cache of sender name (uid -> name) for group chats, avoids repeated
-  // queries for the same bubble on every StreamBuilder rebuild.
-  final Map<String, String> _senderNameCache = {};
+  // Cache of sender info (uid -> _SenderInfo) for group chats, avoids
+  // repeated queries for the same bubble on every StreamBuilder rebuild.
+  // Widened from name-only to also carry role, so the sender-name label can
+  // be colored per role (roleColor()) instead of one fixed color for
+  // everyone.
+  final Map<String, _SenderInfo> _senderInfoCache = {};
 
-  Future<String> _getSenderName(String uid) async {
-    final cached = _senderNameCache[uid];
+  Future<_SenderInfo> _getSenderInfo(String uid) async {
+    final cached = _senderInfoCache[uid];
     if (cached != null) return cached;
 
     final doc = await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .get();
-    final name = doc.data()?['name'] ?? 'User';
-    _senderNameCache[uid] = name;
-    return name;
+    final data = doc.data();
+    final info = _SenderInfo(data?['name'] ?? 'User', data?['role'] as String?);
+    _senderInfoCache[uid] = info;
+    return info;
   }
 
   // "Chat open" = automatic office-hour schedule AND the relevant teacher
@@ -1116,14 +1128,16 @@ class _ChatScreenState extends State<ChatScreen> {
                                   senderId.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 3),
-                                  child: FutureBuilder<String>(
-                                    future: _getSenderName(senderId),
+                                  child: FutureBuilder<_SenderInfo>(
+                                    future: _getSenderInfo(senderId),
                                     builder: (context, senderSnapshot) => Text(
-                                      senderSnapshot.data ?? '...',
+                                      senderSnapshot.data?.name ?? '...',
                                       style: TextStyle(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.blue.shade700,
+                                        color: roleColor(
+                                          senderSnapshot.data?.role,
+                                        ),
                                       ),
                                     ),
                                   ),

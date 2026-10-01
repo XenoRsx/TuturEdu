@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/user_avatar.dart';
 import 'add_group_members_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -194,12 +195,9 @@ class GroupInfoScreen extends StatelessWidget {
                         vertical: 4,
                       ),
                       child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.green.shade100,
-                          child: Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: const TextStyle(color: Colors.green),
-                          ),
+                        leading: UserAvatar(
+                          name: name,
+                          role: userData?['role'] as String?,
                         ),
                         title: Text(name),
                         subtitle: isThisAdmin

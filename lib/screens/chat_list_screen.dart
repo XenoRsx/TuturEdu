@@ -12,6 +12,24 @@
 // StudentDashboard just configure it with a role-specific FloatingActionButton
 // (Create Group Chat / Find a Teacher) and AppBar color instead of showing
 // a separate button menu first.
+//
+// Two list-visibility rules, both applied before a chat ever reaches
+// _buildRow():
+//   - A chat with no `lastMessage` yet (created by tapping "Message" on a
+//     profile/search result, before anyone's actually sent anything) is
+//     hidden entirely - it used to show up as "Start the conversation...",
+//     which was just clutter for a conversation nobody started yet.
+//   - A chat the current user deleted "for me" (chats/{id}.deletedFor.{uid},
+//     a Timestamp) stays hidden only until `lastUpdated` moves past that
+//     timestamp - i.e. it reappears automatically the moment anyone sends a
+//     new message, same as WhatsApp. No rules change needed for this - the
+//     existing chats/{id} update rule already lets any participant write any
+//     field except `participants` freely, same as lastRead/unreadCount.
+//
+// Long-press a row for "Delete for Me" (the above) or "Delete for Everyone"
+// (hard-deletes the chat doc + every message, for every participant - only
+// offered for a 1:1 chat or if you're the group's groupAdmin, matching
+// firestore.rules' chats/{id} `allow delete`).
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,8 +37,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/push_notifications.dart';
 import '../utils/unread_badge.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/user_avatar.dart';
 import 'chat_screen.dart';
 import 'login_screen.dart';
+
+class _OtherUserInfo {
+  final String name;
+  final String? role;
+
+  const _OtherUserInfo(this.name, this.role);
+}
 
 /// Fixed content rendered above the tabs/list - typically a [DashboardHeader]
 /// built from the counts this screen already computes, so a role dashboard
@@ -68,15 +94,13 @@ class _ChatListScreenState extends State<ChatListScreen>
     super.dispose();
   }
 
-  Future<String> _getOtherUserName(String otherUid) async {
+  Future<_OtherUserInfo> _getOtherUserInfo(String otherUid) async {
     final doc = await FirebaseFirestore.instance
         .collection('users')
         .doc(otherUid)
         .get();
-    if (doc.exists) {
-      return doc.data()?['name'] ?? 'User';
-    }
-    return 'User';
+    final data = doc.data();
+    return _OtherUserInfo(data?['name'] ?? 'User', data?['role'] as String?);
   }
 
   String _formatTime(dynamic rawTimestamp) {
@@ -121,6 +145,169 @@ class _ChatListScreenState extends State<ChatListScreen>
         0;
   }
 
+  bool _isVisible(Map<String, dynamic> data, String currentUid) {
+    if (data['lastMessage'] == null) return false;
+
+    final deletedAt =
+        (data['deletedFor'] as Map<String, dynamic>?)?[currentUid]
+            as Timestamp?;
+    if (deletedAt == null) return true;
+
+    final lastUpdated = data['lastUpdated'] as Timestamp?;
+    if (lastUpdated == null) return true;
+    return lastUpdated.toDate().isAfter(deletedAt.toDate());
+  }
+
+  void _showSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showDeleteOptions(
+    BuildContext context,
+    String chatId,
+    Map<String, dynamic> data,
+    String currentUid,
+  ) {
+    final isGroup = data['isGroup'] == true;
+    final canDeleteForEveryone = !isGroup || data['groupAdmin'] == currentUid;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete for Me'),
+              subtitle: const Text('Removes this chat from your list only'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _confirmDeleteForMe(context, chatId, currentUid);
+              },
+            ),
+            if (canDeleteForEveryone)
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: const Text(
+                  'Delete for Everyone',
+                  style: TextStyle(color: Colors.red),
+                ),
+                subtitle: const Text(
+                  'Permanently deletes this chat for everyone',
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _confirmDeleteForEveryone(context, chatId);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteForMe(
+    BuildContext context,
+    String chatId,
+    String currentUid,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Chat'),
+        content: const Text(
+          'This removes the chat from your list only. It will come back if '
+          'the other side sends a new message.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('chats').doc(chatId).update({
+        'deletedFor.$currentUid': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      if (context.mounted) _showSnack(context, 'Failed to delete chat: $e');
+    }
+  }
+
+  Future<void> _confirmDeleteForEveryone(
+    BuildContext context,
+    String chatId,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete for Everyone'),
+        content: const Text(
+          'This permanently deletes the entire chat and every message in '
+          'it, for everyone. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              'Delete for Everyone',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _deleteChatForEveryone(chatId);
+    } catch (e) {
+      if (context.mounted) _showSnack(context, 'Failed to delete chat: $e');
+    }
+  }
+
+  // Firestore batches cap at 500 ops - paginate well under that so a chat
+  // with many messages doesn't fail partway through. The parent chat doc is
+  // only deleted once every message is gone.
+  Future<void> _deleteChatForEveryone(String chatId) async {
+    final chatRef = FirebaseFirestore.instance.collection('chats').doc(chatId);
+    final messagesRef = chatRef.collection('messages');
+
+    while (true) {
+      final snap = await messagesRef.limit(450).get();
+      if (snap.docs.isEmpty) break;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      if (snap.docs.length < 450) break;
+    }
+
+    await chatRef.delete();
+  }
+
   Future<void> _logout(BuildContext context) async {
     setUnreadChatBadge(0);
     await unregisterPushToken();
@@ -140,8 +327,12 @@ class _ChatListScreenState extends State<ChatListScreen>
     required Map<String, dynamic> data,
     required String currentUid,
     required VoidCallback onTap,
+    required VoidCallback onLongPress,
   }) {
-    final lastMessage = data['lastMessage'] ?? 'Start the conversation...';
+    // _isVisible() (checked before a chat ever reaches this method) already
+    // guarantees lastMessage is set - a chat with none is hidden entirely
+    // rather than shown with a placeholder.
+    final lastMessage = data['lastMessage'] as String? ?? '';
     final unreadCount = _unreadFor(data, currentUid);
     final isUnread = unreadCount > 0;
     final tick = _buildLastMessageTick(data, currentUid);
@@ -213,6 +404,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           ],
         ),
         onTap: onTap,
+        onLongPress: onLongPress,
       ),
     );
   }
@@ -249,6 +441,8 @@ class _ChatListScreenState extends State<ChatListScreen>
             ),
           );
         },
+        onLongPress: () =>
+            _showDeleteOptions(context, doc.id, data, currentUid),
       );
     }
 
@@ -260,21 +454,16 @@ class _ChatListScreenState extends State<ChatListScreen>
 
     if (otherUid.isEmpty) return const SizedBox.shrink();
 
-    return FutureBuilder<String>(
-      future: _getOtherUserName(otherUid),
-      builder: (context, nameSnapshot) {
-        final name = nameSnapshot.data ?? 'Loading...';
+    return FutureBuilder<_OtherUserInfo>(
+      future: _getOtherUserInfo(otherUid),
+      builder: (context, infoSnapshot) {
+        final info = infoSnapshot.data;
+        final name = info?.name ?? 'Loading...';
 
         return _buildTile(
           context,
           title: name,
-          avatar: CircleAvatar(
-            backgroundColor: Colors.blue.shade100,
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: const TextStyle(color: Colors.blue),
-            ),
-          ),
+          avatar: UserAvatar(name: name, role: info?.role),
           data: data,
           currentUid: currentUid,
           onTap: () {
@@ -289,6 +478,8 @@ class _ChatListScreenState extends State<ChatListScreen>
               ),
             );
           },
+          onLongPress: () =>
+              _showDeleteOptions(context, doc.id, data, currentUid),
         );
       },
     );
@@ -338,7 +529,12 @@ class _ChatListScreenState extends State<ChatListScreen>
           );
         }
 
-        final allChats = snapshot.data!.docs;
+        final allChats = snapshot.data!.docs
+            .where(
+              (d) =>
+                  _isVisible(d.data() as Map<String, dynamic>, currentUser.uid),
+            )
+            .toList();
         final individualChats = allChats
             .where((d) => (d.data() as Map)['isGroup'] != true)
             .toList();

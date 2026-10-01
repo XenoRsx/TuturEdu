@@ -305,18 +305,47 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.emoji_events_rounded,
-            size: 36,
-            color: Colors.amberAccent,
+          SizedBox(
+            width: 88,
+            height: 88,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: CircularProgressIndicator(
+                    value: percentage / 100,
+                    strokeWidth: 7,
+                    backgroundColor: Colors.white24,
+                    valueColor: const AlwaysStoppedAnimation(
+                      Colors.amberAccent,
+                    ),
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$percentage%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(
-            '$_finalScore / $_totalPoints points ($percentage%)',
+            '$_finalScore / $_totalPoints points',
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 18,
+              fontSize: 16,
             ),
           ),
           const SizedBox(height: 4),
@@ -324,13 +353,30 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
             'Quiz completed — review your answers below',
             style: TextStyle(color: Colors.white70, fontSize: 12),
           ),
-          if (_maxAttempts > 1) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Attempts used: $_attemptsUsed / $_maxAttempts',
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
-          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: [
+              if (_maxAttempts > 1)
+                QuizBadge(
+                  icon: Icons.replay_rounded,
+                  label: 'Attempts $_attemptsUsed / $_maxAttempts',
+                  color: Colors.white,
+                ),
+              if (_dueDate != null)
+                QuizBadge(
+                  icon: _pastDue
+                      ? Icons.event_busy_rounded
+                      : Icons.event_rounded,
+                  label: _pastDue
+                      ? 'Due date passed'
+                      : 'Due ${_dueDate!.day.toString().padLeft(2, '0')}/${_dueDate!.month.toString().padLeft(2, '0')}/${_dueDate!.year}',
+                  color: Colors.white,
+                ),
+            ],
+          ),
           if (_canRetake) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -359,20 +405,8 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
         ? (_existingAnswers?[q.id] as num?)?.toInt()
         : _selectedAnswers[q.id];
 
-    return Container(
+    return QuizCard(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: QuizTheme.primary.withValues(alpha: 0.08),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

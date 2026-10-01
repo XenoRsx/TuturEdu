@@ -10,6 +10,16 @@
 // remaining time is always recomputed fresh from
 // currentQuestionStartedAt + the question's timeLimitSeconds, so it
 // re-syncs automatically whenever the host advances to a new question.
+//
+// status == 'question_results': only the HOST can write quizSessions (see
+// firestore.rules), so this screen never advances itself - it just reacts
+// to the host's write with a passive QuizLeaderboardView (per-question
+// results + points earned that round via pointsThisRound) and a "waiting
+// for host" footer instead of an actionable button. The host flips to this
+// status the moment EITHER the timer runs out OR every participant has
+// answered (host_quiz_session_screen.dart's _maybeAutoEndQuestion) - from
+// this screen's point of view that's what makes the countdown above
+// sometimes stop early instead of reaching 0.
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -168,6 +178,21 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                         // JoinQuizScreen -> here was itself a pushReplacement, so
                         // one pop correctly returns to StudentDashboard.
                         onDone: () => Navigator.pop(context),
+                      );
+                    },
+                  );
+                }
+
+                if (status == 'question_results') {
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: _sessionRef.collection('participants').snapshots(),
+                    builder: (context, participantsSnapshot) {
+                      final participants =
+                          participantsSnapshot.data?.docs ?? [];
+                      return _buildQuestionResults(
+                        session,
+                        participants,
+                        currentUser.uid,
                       );
                     },
                   );
@@ -409,6 +434,55 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildQuestionResults(
+    Map<String, dynamic> session,
+    List<QueryDocumentSnapshot> participants,
+    String myUid,
+  ) {
+    final questions = _questions!;
+    final currentIndex = session['currentQuestionIndex'] as int? ?? 0;
+    if (currentIndex >= questions.length) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final questionDoc = questions[currentIndex];
+    final question = questionDoc.data() as Map<String, dynamic>;
+    final questionId = questionDoc.id;
+    final options = List<String>.from(question['options'] ?? []);
+    final correctIndex = question['correctIndex'] as int? ?? 0;
+    final points = question['points'] as int? ?? 100;
+    final correctAnswerText = correctIndex < options.length
+        ? options[correctIndex]
+        : '';
+
+    return QuizLeaderboardView(
+      participants: participants,
+      myUid: myUid,
+      title: 'Question ${currentIndex + 1} Results',
+      subtitle: 'Correct answer: $correctAnswerText',
+      pointsThisRound: QuizLeaderboardView.pointsEarnedForQuestion(
+        participants,
+        questionId,
+        points,
+      ),
+      footer: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.hourglass_top_rounded,
+            size: 18,
+            color: Colors.grey.shade600,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Waiting for the host to continue...',
+            style: TextStyle(color: Colors.grey.shade700),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -70,7 +70,19 @@ service cloud.firestore {
                         request.resource.data.participants == resource.data.participants.removeAll([request.auth.uid]))
                      );
 
-      allow delete: if false;
+      // "Delete for Everyone" (rujuk BLUEPRINT.md - Delete Chat): padam
+      // terus dokumen chat (lepas client dah padam semua messages dalam
+      // batch berasingan - rujuk allow delete kat messages di bawah). Mana-
+      // mana participant boleh buat untuk chat 1:1, tapi untuk GROUP hanya
+      // groupAdmin sahaja (sama restriction macam participant-removal rule
+      // kat atas). "Delete for Me" (hide chat dari list sendiri sahaja,
+      // deletedFor.{uid} timestamp) TAK perlukan rule baru - update rule di
+      // atas dah benarkan participant tulis mana-mana field selain
+      // `participants` dengan bebas, sama macam lastRead/unreadCount.
+      allow delete: if request.auth != null &&
+                     request.auth.uid in resource.data.participants &&
+                     (resource.data.isGroup != true ||
+                      resource.data.groupAdmin == request.auth.uid);
 
       // Untuk create chat baru (document belum wujud lagi)
       allow create: if request.auth != null &&
@@ -99,7 +111,15 @@ service cloud.firestore {
                          isAdmin()
                        );
 
-        allow delete: if false;
+        // Deliberate narrow carve-out from "messages are soft-delete only"
+        // above: a participant CAN hard-delete a message doc, but this is
+        // only ever exercised by "Delete for Everyone" wiping an ENTIRE
+        // chat's messages at once (chat_list_screen.dart) - there is no UI
+        // path to selectively hard-delete one message while keeping others,
+        // so the audit-trail guarantee for a chat that's still alive and
+        // merely soft-deleting individual messages is unaffected.
+        allow delete: if request.auth != null &&
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
       }
 
       // Sub-collection: scheduledReplies (Overtime Mode - "Schedule Reply")
@@ -235,6 +255,31 @@ service cloud.firestore {
                       request.auth.uid == resource.data.parentUid) &&
                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acknowledged']);
       allow delete: if false;
+    }
+
+    // Collection: announcements (Teacher -> semua Student satu subjek, rujuk
+    // BLUEPRINT.md Seksyen 5.19)
+    // - Sesiapa yang login boleh baca (sama macam quizzes/performance - bukan
+    //   data sensitif, dan elak masalah rules tak dapat "prove" query whereIn)
+    // - Hanya Teacher boleh cipta, untuk subjek yang DIA SENDIRI ajar sahaja,
+    //   dengan readBy kosong
+    // - Update dihadkan ke field `readBy` sahaja, dan hanya untuk TAMBAH uid
+    //   sendiri sekali (tak boleh buang orang lain / tambah uid orang lain)
+    // - Delete: teacher yang hantar, atau Admin
+    match /announcements/{announcementId} {
+      allow read: if request.auth != null;
+      allow create: if isTeacher() &&
+                     request.auth.uid == request.resource.data.teacherUid &&
+                     teachesSubject(request.resource.data.subjectLevel) &&
+                     request.resource.data.readBy.size() == 0;
+      allow update: if request.auth != null &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']) &&
+                     request.resource.data.readBy.hasAll(resource.data.readBy) &&
+                     request.resource.data.readBy.size() == resource.data.readBy.size() + 1 &&
+                     request.auth.uid in request.resource.data.readBy &&
+                     !(request.auth.uid in resource.data.readBy);
+      allow delete: if request.auth != null &&
+                     (request.auth.uid == resource.data.teacherUid || isAdmin());
     }
 
     // Collection: attendance (Attendance Overview, rujuk BLUEPRINT.md Seksyen 5.8)

@@ -151,106 +151,128 @@ class _SelfPacedQuizListScreenState extends State<SelfPacedQuizListScreen> {
                         final title = data['title'] ?? 'Untitled Quiz';
                         final subject = data['subjectLevel'] ?? '';
                         final questionCount = data['questionCount'] ?? 0;
+                        final dueDate = (data['dueDate'] as Timestamp?)
+                            ?.toDate();
+                        final pastDue =
+                            dueDate != null && DateTime.now().isAfter(dueDate);
                         final color =
                             QuizTheme.optionColors[title.hashCode.abs() %
                                 QuizTheme.optionColors.length];
 
-                        return Container(
+                        return QuizCard(
                           margin: const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: QuizTheme.primary.withValues(
-                                  alpha: 0.08,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          accentColor: color,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AttemptQuizScreen(
+                                  quizId: doc.id,
+                                  quizTitle: title,
                                 ),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                              ),
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      color,
+                                      color.withValues(alpha: 0.75),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withValues(alpha: 0.35),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.assignment_outlined,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.black87,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '$subject · $questionCount question(s)',
+                                      style: const TextStyle(
+                                        color: Colors.black54,
+                                        fontSize: 12.5,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (dueDate != null) ...[
+                                      const SizedBox(height: 6),
+                                      QuizBadge(
+                                        icon: pastDue
+                                            ? Icons.event_busy_rounded
+                                            : Icons.event_rounded,
+                                        label: pastDue
+                                            ? 'Due date passed'
+                                            : 'Due ${dueDate.day.toString().padLeft(2, '0')}/${dueDate.month.toString().padLeft(2, '0')}/${dueDate.year}',
+                                        color: pastDue
+                                            ? Colors.red
+                                            : Colors.orange,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              FutureBuilder<DocumentSnapshot>(
+                                future: FirebaseFirestore.instance
+                                    .collection('quizAttempts')
+                                    .doc('${doc.id}_${currentUser.uid}')
+                                    .get(),
+                                builder: (context, attemptSnapshot) {
+                                  final attemptData =
+                                      attemptSnapshot.data?.data()
+                                          as Map<String, dynamic>?;
+                                  final completed =
+                                      attemptData?['status'] == 'completed';
+                                  if (!completed) {
+                                    return const Icon(
+                                      Icons.chevron_right,
+                                      color: Colors.grey,
+                                    );
+                                  }
+                                  final score = attemptData?['score'] ?? 0;
+                                  final total =
+                                      attemptData?['totalPoints'] ?? 0;
+                                  return QuizBadge(
+                                    icon: Icons.emoji_events_outlined,
+                                    label: '$score/$total',
+                                    color: Colors.green,
+                                  );
+                                },
                               ),
                             ],
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            leading: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.assignment_outlined,
-                                color: Colors.white,
-                              ),
-                            ),
-                            title: Text(
-                              title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '$subject · $questionCount question(s)',
-                              style: const TextStyle(color: Colors.black54),
-                            ),
-                            trailing: FutureBuilder<DocumentSnapshot>(
-                              future: FirebaseFirestore.instance
-                                  .collection('quizAttempts')
-                                  .doc('${doc.id}_${currentUser.uid}')
-                                  .get(),
-                              builder: (context, attemptSnapshot) {
-                                final attemptData =
-                                    attemptSnapshot.data?.data()
-                                        as Map<String, dynamic>?;
-                                final completed =
-                                    attemptData?['status'] == 'completed';
-                                if (!completed) {
-                                  return const Icon(
-                                    Icons.chevron_right,
-                                    color: Colors.grey,
-                                  );
-                                }
-                                final score = attemptData?['score'] ?? 0;
-                                final total = attemptData?['totalPoints'] ?? 0;
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '$score/$total',
-                                    style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AttemptQuizScreen(
-                                    quizId: doc.id,
-                                    quizTitle: title,
-                                  ),
-                                ),
-                              );
-                            },
                           ),
                         );
                       },

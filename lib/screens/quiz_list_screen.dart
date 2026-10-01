@@ -56,6 +56,13 @@ class QuizListScreen extends StatelessWidget {
     await batch.commit();
   }
 
+  void _createQuiz(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CreateQuizScreen()),
+    );
+  }
+
   Future<void> _hostSession(
     BuildContext context,
     String quizId,
@@ -99,6 +106,17 @@ class QuizListScreen extends StatelessWidget {
     }
   }
 
+  IconData _modeIcon(String mode) {
+    switch (mode) {
+      case 'self_paced':
+        return Icons.schedule_rounded;
+      case 'both':
+        return Icons.call_merge_rounded;
+      default:
+        return Icons.flash_on_rounded;
+    }
+  }
+
   Future<String> _generateUniqueJoinCode() async {
     final random = DateTime.now().millisecondsSinceEpoch;
     for (var attempt = 0; attempt < 10; attempt++) {
@@ -109,7 +127,12 @@ class QuizListScreen extends StatelessWidget {
           .get();
       final stillActive = existing.docs.any((doc) {
         final status = doc.data()['status'];
-        return status == 'waiting' || status == 'active';
+        // 'question_results' (see host_quiz_session_screen.dart) is still an
+        // ongoing session between questions, not yet 'ended' - its join code
+        // must stay reserved too.
+        return status == 'waiting' ||
+            status == 'active' ||
+            status == 'question_results';
       });
       if (!stillActive) return code;
     }
@@ -131,12 +154,7 @@ class QuizListScreen extends StatelessWidget {
         backgroundColor: QuizTheme.primary,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CreateQuizScreen()),
-          );
-        },
+        onPressed: () => _createQuiz(context),
         backgroundColor: QuizTheme.primary,
         icon: const Icon(Icons.add),
         label: const Text('New Quiz'),
@@ -191,6 +209,19 @@ class QuizListScreen extends StatelessWidget {
                         'No quizzes yet. Tap "New Quiz" to create one.',
                         style: TextStyle(color: Colors.black54),
                       ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => _createQuiz(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create Your First Quiz'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: QuizTheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -212,117 +243,163 @@ class QuizListScreen extends StatelessWidget {
                       QuizTheme.optionColors[title.hashCode.abs() %
                           QuizTheme.optionColors.length];
 
-                  return Container(
+                  return QuizCard(
                     margin: const EdgeInsets.only(bottom: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: QuizTheme.primary.withValues(alpha: 0.08),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
                     ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      leading: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.quiz_rounded,
-                          color: Colors.white,
-                        ),
-                      ),
-                      title: Text(
-                        title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '$subject · $questionCount question(s) · ${_modeLabel(mode)}',
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (hasSelfPaced)
-                            IconButton(
-                              icon: const Icon(
-                                Icons.leaderboard_outlined,
-                                color: QuizTheme.primary,
+                    accentColor: color,
+                    onTap: () {
+                      if (!canHost) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'This quiz is Self-Paced only — students attempt it on their '
+                              'own, no live session to host.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      _hostSession(context, doc.id, title);
+                    },
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [color, color.withValues(alpha: 0.75)],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withValues(alpha: 0.35),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
                               ),
-                              tooltip: 'View Results',
-                              onPressed: () => Navigator.push(
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.quiz_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black87,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                subject,
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 12.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  QuizBadge(
+                                    icon: _modeIcon(mode),
+                                    label: _modeLabel(mode),
+                                  ),
+                                  QuizBadge(
+                                    icon: Icons.format_list_numbered_rounded,
+                                    label: '$questionCount Qs',
+                                    color: Colors.blueGrey,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert,
+                            color: Colors.grey.shade600,
+                          ),
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => QuizResultsScreen(
-                                    quizId: doc.id,
-                                    quizTitle: title,
-                                    subjectLevel: subject,
-                                  ),
+                                  builder: (_) =>
+                                      CreateQuizScreen(quizId: doc.id),
                                 ),
+                              );
+                            } else if (value == 'delete') {
+                              _deleteQuiz(context, doc.id, title);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.edit_outlined,
+                                  color: QuizTheme.primary,
+                                ),
+                                title: Text('Edit'),
+                                contentPadding: EdgeInsets.zero,
                               ),
                             ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: ListTile(
+                                leading: Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                ),
+                                title: Text('Delete'),
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (hasSelfPaced)
                           IconButton(
                             icon: const Icon(
-                              Icons.edit_outlined,
+                              Icons.leaderboard_outlined,
                               color: QuizTheme.primary,
                             ),
-                            tooltip: 'Edit',
+                            tooltip: 'View Results',
                             onPressed: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    CreateQuizScreen(quizId: doc.id),
+                                builder: (_) => QuizResultsScreen(
+                                  quizId: doc.id,
+                                  quizTitle: title,
+                                  subjectLevel: subject,
+                                ),
                               ),
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
-                            ),
-                            tooltip: 'Delete',
-                            onPressed: () =>
-                                _deleteQuiz(context, doc.id, title),
-                          ),
-                          Icon(
-                            canHost
-                                ? Icons.play_circle_fill
-                                : Icons.assignment_turned_in_outlined,
-                            color: QuizTheme.primary,
-                            size: 28,
-                          ),
-                        ],
-                      ),
-                      onTap: () {
-                        if (!canHost) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'This quiz is Self-Paced only — students attempt it on their '
-                                'own, no live session to host.',
-                              ),
-                            ),
-                          );
-                          return;
-                        }
-                        _hostSession(context, doc.id, title);
-                      },
+                        Icon(
+                          canHost
+                              ? Icons.play_circle_fill
+                              : Icons.assignment_turned_in_outlined,
+                          color: QuizTheme.primary,
+                          size: 28,
+                        ),
+                      ],
                     ),
                   );
                 },

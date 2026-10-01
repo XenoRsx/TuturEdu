@@ -1014,6 +1014,93 @@ akaun baru dicipta)
 >
 > **Had & trade-off diterima:** Kod OTP disimpan sebagai hash (bukan plaintext) dalam Firestore, expire 5 minit, had 5 attempts sebelum kena minta kod baru. Tiada rate-limit untuk "resend" di peringkat server (client-side sahaja, cooldown 30 saat) — trade-off diterima untuk skop FYP, boleh upgrade guna App Check/Cloud Functions rate-limiting masa depan kalau perlu.
 
+### 5.18 Role-Colored Avatars & Chat Labels (✅ dikodkan)
+
+- **`UserAvatar`** (widget kongsi baru, `lib/widgets/user_avatar.dart`) — bulatan initial berwarna ikut role (`roleColor()`, `lib/utils/role_colors.dart` — Teacher=hijau, Student=biru, Parent=oren, Admin=ungu, sepadan dengan `appBarColor` dashboard masing-masing), menggantikan `CircleAvatar` warna tetap yang dulu disalin-tampal merentas beberapa skrin. Guna HANYA warna literal/dari param, tiada `Theme.of(context)` — selamat digunakan di mana-mana skrin termasuk skrin Quiz yang permanently-light. Digunakan merentas SEMUA tempat avatar wujud: `chat_list_screen.dart` (senarai chat), `user_profile_screen.dart`, `user_search_screen.dart`, `group_info_screen.dart` (senarai ahli), `manage_users_screen.dart`, dan `settings_screen.dart` sendiri.
+- **Role-colored sender label (group chat)** — `chat_screen.dart`'s label nama pengirim di atas setiap mesej dalam group chat (dulu `Colors.blue.shade700` untuk semua orang) kini guna `roleColor(role)` — dikira dari `_getSenderInfo()` (dulu `_getSenderName()`, sekarang cache name+role sekali, bukan setakat name).
+- Dua salinan `_roleColor()` yang duplicated (`user_profile_screen.dart` dan `manage_users_screen.dart`) dipadam, gantikan dengan `roleColor()` yang dikongsi.
+- **Profile picture upload dicuba, kemudian ditarik balik (2026-09)** — versi awal fitur ni bagi user upload gambar profile sebenar (`users/{uid}.photoUrl`, upload ke Firebase Storage, plus skrin crop bulatan guna package `crop_your_image`). Upload/simpan Firestore berjaya, tapi gambar tak papar dalam app (`UserAvatar` fallback ke initial huruf) — root cause: Flutter Web punya `NetworkImage`/`Image.network` fetch bytes gambar melalui HTTP request yang tertakluk CORS, dan bucket Storage projek ni TAKDE CORS policy dikonfigurasi (`gsutil cors set` diperlukan, satu langkah setup manual guna Google Cloud SDK di terminal sendiri — rujuk pattern sama macam setup MFA secrets). Selepas dipertimbangkan, setup CORS ni dinilai terlalu banyak hassle untuk ciri kecil ni, jadi keseluruhan flow upload/crop ditarik balik sepenuhnya (`crop_your_image` dependency dibuang, `storage.rules`'s `profilePictures` match block dibuang, `UserAvatar` kembali ke initial-sahaja). Ciri role-color (di atas) TIDAK terjejas — ia tak perlukan Storage/CORS langsung, cuma data Firestore yang dah sedia ada.
+- **Nota bug sebenar (dijumpai 2026-09, laporan pengguna "log out button tekan x jadi apa"):** `lib/utils/push_notifications.dart`'s `_currentToken()` (dipanggil oleh `unregisterPushToken()`, yang pula dipanggil dari SETIAP laluan log out — `chat_list_screen.dart`, `admin_dashboard.dart`, `settings_screen.dart`) panggil `FirebaseMessaging.instance.getToken()` TANPA timeout. Kalau panggilan tu hang (contoh: tiada service worker berdaftar, promise browser tak pernah resolve), keseluruhan fungsi log out (dan push-toggle-off, dan Delete Account — sama-sama panggil `unregisterPushToken()`) hang selama-lamanya dengan TIADA error dipapar - nampak macam "butang tak buat apa-apa". Dibetulkan dengan `.timeout(Duration(seconds: 5), onTimeout: () => null)` pada `_currentToken()` — setiap caller dah pun handle `token == null` dengan graceful (`return` awal), jadi fix ni automatik betulkan SEMUA laluan (log out, push toggle, delete account) sekali gus, bukan patch berasingan setiap satu.
+
+### 5.19 Aliran Announcement — Teacher → Semua Student Satu Subjek (✅ Sudah dilaksanakan)
+
+```
+Teacher → Settings → "My Announcements" (seksyen "Announcements", bawah
+"My Subjects") → TeacherAnnouncementsScreen
+   → FAB "New" → CreateAnnouncementScreen
+        - Pilih SATU subjek (dropdown = users/{uid}.subjects teacher sendiri)
+        - Isi Title + Message → "Send Announcement"
+        - Tulis satu dokumen announcements/{id}:
+            title, body, subjectLevel, teacherUid, teacherName,
+            createdAt (serverTimestamp), readBy: []
+   → Cloud Function onNewAnnouncement (functions/index.js) → push notification
+     ke SETIAP Student yang subjects mengandungi subjectLevel tu
+   → TeacherAnnouncementsScreen papar senarai sendiri + "Seen by N" (readBy.length),
+     boleh Delete (PopupMenu + dialog confirm)
+
+Student → Settings → "Announcements"
+   → StudentAnnouncementsScreen: query announcements where subjectLevel
+     whereIn [subjects student] → yang belum dibaca di-tint + bold + dot biru
+   → Tap → bottom sheet papar mesej penuh + arrayUnion uid sendiri ke readBy
+```
+
+- **Audience**: murid sahaja (BUKAN parent) — pilihan user. Satu announcement = satu subjek.
+- **Entry point sengaja BUKAN kat `DashboardHeader`'s QuickAction row** (nav bar) — percubaan pertama letak kat situ, user minta buang ("saya xnk announcment tu ada dekat nav bar kekalkan navbar semasa tanpa tambah apa apa") sebab tak nak navbar sedia ada diubah. Diletak dalam Settings sebagai satu row (seksyen "Announcements", sama pattern macam "My Subjects") untuk kedua-dua Teacher dan Student. Kalau nak tambah entry point lain di masa depan, JANGAN letak balik kat QuickAction row tanpa tanya user dulu.
+- **Tiada composite index diperlukan**: teacher query `teacherUid ==` sahaja, student query `subjectLevel whereIn` sahaja — kedua-dua disusun ikut `createdAt` CLIENT-SIDE (bukan `orderBy`), sama tabiat macam `self_paced_quiz_list_screen.dart`. `createdAt` null (serverTimestamp belum resolve) dianggap "paling baru". Student dengan subjects kosong → EmptyState, sebab `whereIn: []` ialah query tak sah. Cloud Function pula query `subjects array-contains` sahaja dan tapis `role == "Student"` dalam kod (elak index `role` + `subjects`).
+- **firestore.rules** (`announcements/{id}`): `read` = sesiapa login (sama macam `quizzes`/`performance`, bukan data sensitif); `create` = `isTeacher()` + `teacherUid == auth.uid` + `teachesSubject(subjectLevel)` (teacher HANYA boleh hantar ke subjek yang dia sendiri ajar — dropdown sekadar UX) + `readBy` kosong; `update` = field `readBy` SAHAJA, dan hanya boleh TAMBAH uid sendiri sekali (`hasAll` lama + saiz +1 + `auth.uid in` baru + belum ada dalam lama); `delete` = teacher pengarang atau Admin. Tajuk/mesej tak boleh diedit selepas hantar.
+- Tandakan "read" adalah best-effort (try/catch) — kalau update gagal, murid tetap boleh baca announcement.
+- **Di luar skop**: parent, lampiran, edit selepas hantar, jadual hantar, kunci office-hour (announcement bukan chat), badge unread kat stat row dashboard.
+
+---
+
+### 5.20 Aliran Delete Chat — "for Me" & "for Everyone" (✅ Sudah dilaksanakan)
+
+```
+chat_list_screen.dart → long-press mana-mana row (1:1 atau group)
+   → Bottom sheet:
+        - "Delete for Me" (sentiasa ada)
+        - "Delete for Everyone" (HANYA kalau 1:1, ATAU group DAN user
+          semasa ialah groupAdmin)
+
+"Delete for Me":
+   → AlertDialog confirm
+   → chats/{chatId}.update({ 'deletedFor.{uid}': serverTimestamp() })
+   → Chat terus hilang dari SENARAI SAYA sahaja (sama macam lastRead/
+     unreadCount, tiada perubahan firestore.rules diperlukan — update rule
+     sedia ada dah benarkan participant tulis mana-mana field selain
+     `participants` dengan bebas)
+   → Muncul BALIK secara automatik bila `lastUpdated` chat tu lepas masa
+     `deletedFor.{uid}` (i.e. sesiapa hantar mesej baru) - chat_list_screen.dart's
+     `_isVisible()` check ni setiap kali, tiada langkah "undelete" berasingan
+
+"Delete for Everyone":
+   → AlertDialog confirm ("This cannot be undone")
+   → Client padam SEMUA dokumen messages dalam batch (limit 450/batch, loop
+     sampai habis - Firestore had 500 operation/batch, 450 bagi margin
+     selamat), lepas tu padam dokumen chats/{chatId} sendiri — sama pattern
+     macam quiz_list_screen.dart's _deleteQuiz(), tapi dengan paginate sebab
+     chat boleh ada banyak mesej (quiz questions sentiasa sikit)
+   → firestore.rules: `chats/{id}` allow delete DITUKAR dari `if false`
+     (deliberate block asal) ke "participant (1:1) ATAU groupAdmin (group)".
+     `messages/{messageId}` allow delete pula DITAMBAH (dulu `if false`
+     eksplisit) — mana-mana participant chat tu boleh hard-delete mesej,
+     tapi ni carve-out SEMPIT: satu-satunya laluan UI untuk ni ialah "Delete
+     for Everyone" yang padam SEMUA mesej sekali gus, TIADA cara untuk padam
+     terus satu-satu mesej secara selektif - prinsip audit-trail untuk
+     soft-delete biasa (rujuk 5.16) kekal tak terjejas untuk chat yang masih
+     hidup.
+   → `scheduledReplies` subcollection (Overtime Mode) SENGAJA tak dibersihkan
+     — rule sedia ada cuma benarkan pemilik (`senderId`) padam rekod dia
+     sendiri, jadi scheduledReplies dari participant LAIN akan tertinggal
+     sebagai debris tak berbahaya (tak boleh diakses lagi lepas chat doc
+     dipadam, data pun kecil/jarang) - tak berbaloi tambah kerumitan untuk
+     bersihkan ni.
+```
+
+> **Nota kenapa "hide" (bukan hard-delete) untuk "Delete for Me"**: `firestore.rules`'s `allow delete` untuk `chats` ASALNYA `if false` dengan sengaja — ubah terus ke permissive untuk SEMUA orang akan bercanggah dengan falsafah audit-trail projek ni. "Delete for Me" sekadar flag per-user (`deletedFor` map), bukan padam sebenar, jadi selamat untuk mana-mana participant buat bila-bila.
+
+> **Nota kenapa buang placeholder "Start the conversation..."**: Tapping "Message" pada profile/search result (user_profile_screen.dart/user_search_screen.dart) CIPTA terus dokumen `chats/{chatId}` (participants + lastUpdated) SEBELUM sebarang mesej dihantar — ini sengaja dikekalkan macam asal (chat_screen.dart ada beberapa ciri, contoh duty-status listener, read receipts, yang anggap dokumen chat tu dah wujud sebaik skrin dibuka). Fix sebenar ialah kat PAPARAN sahaja: `chat_list_screen.dart`'s `_isVisible()` sorok terus chat yang `lastMessage` tak wujud lagi (tiada mesej pernah dihantar), jadi "chat kosong" tu tak muncul dalam senarai SESIAPA sampai mesej PERTAMA betul-betul dihantar.
+
 ---
 
 ## 6. Firestore Security Rules (Ringkasan)
@@ -1021,7 +1108,7 @@ akaun baru dicipta)
 - **Fungsi `isAdmin()`** — helper yang check role user semasa dari `users/{uid}` sama ada `"Admin"`; digunakan dalam rules `users` dan `subjectCatalog`
 - `users` — boleh dibaca oleh sesiapa yang login; boleh diedit oleh pemilik akaun sendiri **ATAU** oleh Admin (guna `isAdmin()`) — `write` dalam Firestore rules meliputi create/update/DELETE, jadi rule sedia ada ni juga yang benarkan self-delete akaun dari Settings (rujuk 5.14), tiada rule berasingan diperlukan. Rule sedia ada ni cukup untuk Admin tulis `parentUid`/`childUids` pada DUA dokumen user berlainan dalam satu batch (link_parent_child_screen.dart, rujuk 5.9) — tiada perubahan rule diperlukan sebab `isAdmin()` benarkan Admin tulis mana-mana dokumen `users`. Sama juga untuk `fcmTokens`/`pushEnabled`/`leaveStart`/`leaveEnd` (rujuk 5.12/5.14) — user tulis field-field tu pada dokumen sendiri sahaja, rule sedia ada dah cukup, tiada perubahan diperlukan untuk seluruh Settings screen
 - `subjectCatalog` — boleh dibaca oleh sesiapa yang login; hanya Admin boleh tulis (tambah/edit/padam)
-- `chats` — hanya participant yang terlibat boleh baca/tulis, ATAU Admin boleh baca (ditambah untuk `admin_reports_screen.dart`'s `count()` aggregation, rujuk 5.11 - awalnya terlepas, punca bug permission-denied bila Reports mula-mula dibina)
+- `chats` — hanya participant yang terlibat boleh baca/tulis, ATAU Admin boleh baca (ditambah untuk `admin_reports_screen.dart`'s `count()` aggregation, rujuk 5.11 - awalnya terlepas, punca bug permission-denied bila Reports mula-mula dibina). `allow delete` (rujuk 5.20, Delete Chat "for Everyone") — participant untuk 1:1, groupAdmin sahaja untuk group; `messages` sub-collection pun dapat `allow delete` yang sepadan (dulu sama-sama `if false`)
 - `chats/{chatId}/messages` — mesej hanya boleh dicipta (bukan edit/padam), dan `senderId` mesti padan dengan pengguna yang login
 - `chats/{chatId}/scheduledReplies` — hanya participant boleh baca; hanya pemilik (`senderId` == uid login) boleh cipta/kemaskini/padam (untuk Overtime Mode "Schedule Reply")
 - **Fungsi `teachesSubject(subject)`** — helper yang check `subject` tu ada dalam `users/{uid}.subjects` user semasa; digunakan dalam rules `performance` dan `attendance`
@@ -1260,7 +1347,7 @@ quizSessions (collection)                  // hanya untuk mod LIVE
         ├── quizId: string
         ├── hostUid: string                // teacher yang start sesi
         ├── joinCode: string               // 6-digit, unik semasa sesi aktif
-        ├── status: "waiting" | "active" | "ended"
+        ├── status: "waiting" | "active" | "question_results" | "ended"  // ✅ "question_results" ditambah - fasa interim antara soalan (rujuk 9.5)
         ├── currentQuestionIndex: number
         ├── startedAt / endedAt: timestamp
         └── participants (sub-collection)
@@ -1292,8 +1379,13 @@ Teacher pilih quiz → tekan "Host Live Session"
    → Setiap soalan: papar dengan timer countdown
         - Student submit jawapan → update participants/{uid}.answers[questionId]
         - Markah dikira: correct + speed bonus (jawab lebih cepat = markah lebih tinggi, optional)
-   → Teacher tekan "Next" → currentQuestionIndex + 1, ulang sampai soalan habis
-   → Status "ended" → papar leaderboard akhir (susun ikut score, descending)
+   → ✅ Status "active" → "question_results" AUTOMATIK bila timer habis ATAU semua
+     participant dah jawab (skip baki timer) → papar leaderboard PER-SOALAN
+     (points diperoleh round tu + ranking terkini) kepada host & setiap student
+   → Teacher tekan "Next Question" (dari fasa question_results) → currentQuestionIndex + 1,
+     status balik "active", ulang sampai soalan habis
+   → Soalan terakhir: Teacher tekan "Show Final Leaderboard" → status "ended" →
+     papar leaderboard akhir (susun ikut score, descending)
 ```
 
 **Self-Paced (Student) — ✅ rujuk 9.6 untuk butiran pelaksanaan sebenar:**
@@ -1323,8 +1415,14 @@ match /quizAttempts/{attemptId} {
 ### 9.5 Nota Pelaksanaan (Live Session)
 
 - **Real-time sync Live Session** guna Firestore `StreamBuilder` (sama pattern macam Chat) — teacher push `currentQuestionIndex`, semua student listen dan auto-update UI bila soalan bertukar
-- **Join code collision**: semasa generate 6-digit code, elok check dulu takde sesi lain yang aktif dengan code sama (query `quizSessions` where `joinCode == code AND status == "active"`)
+- **Join code collision**: semasa generate 6-digit code, elok check dulu takde sesi lain yang aktif dengan code sama (query `quizSessions` where `joinCode == code AND status == "active"`) — `quiz_list_screen.dart`'s `_generateUniqueJoinCode()` check ni juga kena treat `"question_results"` sebagai "masih aktif" (bukan setakat `"waiting"`/`"active"`), sebab fasa tu pun sesi yang belum `"ended"`.
 - **Leaderboard** boleh dikira on-the-fly dari `participants` sub-collection (sort by `score` descending) — tak perlu simpan leaderboard berasingan
+- **✅ Fasa `question_results` (per-soalan) + skip timer bila semua siap**: lepas setiap soalan, sesi masuk fasa interim `"question_results"` (bukan terus soalan seterusnya) — papar `QuizLeaderboardView` yang sama macam leaderboard akhir, tapi dengan `title`/`subtitle` khusus soalan tu + `pointsThisRound` (map UID→markah diperoleh SOALAN NI SAHAJA, dikira `static QuizLeaderboardView.pointsEarnedForQuestion()` terus dari `answers.{questionId}.correct` yang dah tersimpan — tiada field baru perlu ditulis semasa submit jawapan).
+  - Transisi `"active"` → `"question_results"` automatik, dikawal `host_quiz_session_screen.dart`'s `_maybeAutoEndQuestion()` (dicheck setiap tick 1-saat via `Timer.periodic`, sama pattern macam countdown student) — trigger bila SALAH SATU: (a) timer habis (`remaining <= 0`), ATAU (b) SEMUA participant yang join dah jawab soalan tu (`answeredCount >= participants.length`). (b) inilah "skip timer bila semua siap" — sesi terus ke fasa results tanpa tunggu baki masa timer habis, jimat masa kalau semua student dah selesai awal. Teacher juga boleh paksa awal bila-bila via butang sekunder "End Question Now" (contoh: seorang student AFK, tak jawab langsung — teacher boleh teruskan tanpa tunggu timer habis).
+  - Guard `_autoEndedForIndex` (int? , simpan currentQuestionIndex yang dah di-auto-end) elak double-write status yang sama berulang kali (dicheck/dipanggil setiap rebuild) — reset semula secara semula jadi bila `currentQuestionIndex` bertukar ke soalan baru (nombor tu dah tak sepadan lagi).
+  - Hanya HOST (teacher) boleh tulis `quizSessions` (rujuk `firestore.rules`), jadi student TAK boleh push transisi status sendiri — skrin student (`live_quiz_play_screen.dart`) sekadar REACT pasif bila host tulis `"question_results"` (papar leaderboard interim + footer "Waiting for the host to continue..." tanpa butang), student punya countdown local pun automatik berhenti awal bila status tukar (walaupun angka countdown local dia belum sampai 0).
+  - Dari `"question_results"`, teacher tekan "Next Question" (soalan biasa) atau "Show Final Leaderboard" (soalan terakhir) → `_nextQuestionOrEnd()` (fungsi sedia ada, kini explicitly set `status: "active"` semula bila advance, sebab status semasa tu `"question_results"` bukan `"active"` lagi).
+  - **Tiada perubahan `firestore.rules`** — rule `quizSessions` sedia ada (`allow update: if request.auth.uid == resource.data.hostUid`) dah cukup umum untuk terima nilai `status` baru ni, tiada whitelist nilai status dalam rule.
 
 ### 9.6 Nota Pelaksanaan (✅ Self-Paced)
 
@@ -1376,6 +1474,48 @@ match /quizAttempts/{attemptId} {
 - Masuk dari `quiz_list_screen.dart` — ikon Edit baru (`Icons.edit_outlined`)
   pada setiap row quiz, buka `CreateQuizScreen(quizId: doc.id)`.
 
+### 9.7 UI/UX Polish Pass (✅ dikodkan)
+
+Laluan visual sahaja - tiada perubahan skema Firestore atau `firestore.rules`,
+tiada logik baharu dibuka (setiap field yang dipapar sebagai badge baru,
+contoh `dueDate`/`mode`/`attemptsUsed`, sudah pun di-fetch, cuma tak
+dipaparkan sebelum ni).
+
+- **`QuizCard`/`QuizBadge`** (baru, dalam `lib/utils/quiz_theme.dart` — file
+  ni memang sudah label dirinya "shared visual language" untuk modul quiz,
+  jadi widget kongsi baru diletak sini, bukan `lib/widgets/`) menggantikan
+  blok `Container(decoration: BoxDecoration(color: Colors.white, ...))` yang
+  asalnya disalin-tampal merentas 5 fail berlainan. **Kedua-duanya guna
+  warna literal tetap sahaja** (tiada `Theme.of(context)` langsung) supaya
+  selamat digunakan dalam MANA-MANA skrin quiz, termasuk yang tak
+  membalut `body:` dalam `Theme(data: ThemeData.light(...))` (contoh
+  `attempt_quiz_screen.dart`) — elak jerat dark-mode yang CLAUDE.md dah
+  amaran dua kali sebelum ni.
+- `quiz_list_screen.dart` (Teacher, "My Quizzes"): kad guna `QuizCard`, badge
+  mod + bilangan soalan ditambah (dulu cuma teks subtitle polos), butang
+  Edit+Delete digabung jadi satu `PopupMenuButton` (kebab) supaya baris
+  tindakan tak sesak (dulu 3-4 ikon berturutan setiap item), dan empty state
+  dapat butang CTA "Create Your First Quiz".
+- `self_paced_quiz_list_screen.dart` (Student): kad guna `QuizCard`, badge
+  due date baru ditambah (merah kalau dah lepas tarikh, oren kalau belum) —
+  data ni sebelum ni cuma nampak lepas dah buka quiz tu, bukan dalam senarai.
+- `attempt_quiz_screen.dart` (Student): header markah mod Review kini ada
+  ring peratusan bulat (gaya sama macam countdown ring Live Session) sebagai
+  fokus visual, plus badge "Attempts X/Y" dan due date. Kad soalan guna
+  `QuizCard`.
+- `quiz_results_screen.dart` (Teacher): kad ringkasan + setiap baris student
+  guna `QuizCard`, 3 statistik ringkasan dapat ikon masing-masing
+  (check/hourglass/groups), chip peratusan jadi `QuizBadge`.
+- `create_quiz_screen.dart`: sentuhan ringan sahaja (fail ni baru sahaja
+  dapat ciri Edit Quiz, borang kompleks bukan tempat nak ambil risiko) — 3
+  `ChoiceChip` Mode dapat ikon (flash/schedule/merge), badge nombor soalan
+  ditukar dari kotak bucu-bulat rata ke bulat bergradient + shadow lembut.
+- **Sengaja tak disentuh**: `join_quiz_screen.dart` (dah kemas), dan
+  `host_quiz_session_screen.dart`/`live_quiz_play_screen.dart`/
+  `quiz_leaderboard_view.dart` (baru sahaja direka semula dalam sesi yang
+  sama untuk fasa `question_results`/skip-timer, rujuk 9.5 — elak risiko
+  destabilkan kerja yang baru siap tu).
+
 ---
 
 ## 10. Status Keseluruhan Pembangunan
@@ -1419,6 +1559,11 @@ match /quizAttempts/{attemptId} {
 - [x] Teacher assign subjek untuk Student (dari profil Student) + pilih subjek sendiri (dari Settings) — kedua-duanya Admin-only sebelum ini (rujuk Seksyen 5.7a)
 - [x] Interactive Quiz — Edit Quiz (ubah title/subjek/mod/retake/due-date/soalan pada quiz sedia ada, rujuk Seksyen 9.6b)
 - [x] "Bahasa Malaysia" ditukar nama jadi "Bahasa Melayu" dalam katalog Manage Subjects
+- [x] Interactive Quiz — Live Session dapat fasa `question_results` per-soalan (leaderboard interim + points diperoleh soalan tu) dan skip-timer automatik bila semua participant dah jawab (rujuk Seksyen 9.5)
+- [x] Interactive Quiz — UI/UX polish pass (kad/badge kongsi `QuizCard`/`QuizBadge`, due-date badge, ring peratusan, menu Edit/Delete digabung, rujuk Seksyen 9.7)
+- [x] Announcement system — Teacher hantar ke semua Student dalam satu subjek, dengan push notification & "Seen by N" (rujuk Seksyen 5.19)
+- [x] Delete Chat — "for Me" (hide, muncul balik bila ada mesej baru) & "for Everyone" (padam terus chat + semua mesej, rujuk Seksyen 5.20); chat kosong (tiada mesej pernah dihantar) tak lagi dipapar dalam senarai sesiapa
+- [x] Label warna ikut role (Student/Teacher/Parent/Admin) untuk avatar (`UserAvatar` merentas seluruh app) & nama pengirim dalam group chat (rujuk Seksyen 5.18) — profile picture upload dicuba tapi ditarik balik (isu CORS Storage di Web, rujuk 5.18)
 
 ---
 

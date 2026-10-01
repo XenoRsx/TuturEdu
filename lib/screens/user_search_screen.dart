@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/user_avatar.dart';
 import 'chat_screen.dart';
 import 'user_profile_screen.dart';
 
@@ -147,14 +148,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           horizontal: 14,
                           vertical: 4,
                         ),
-                        leading: CircleAvatar(
-                          backgroundColor: widget.accentColor.withValues(
-                            alpha: 0.15,
-                          ),
-                          child: Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: TextStyle(color: widget.accentColor),
-                          ),
+                        leading: UserAvatar(
+                          name: name,
+                          role: widget.targetRole,
                         ),
                         title: Text(
                           name,

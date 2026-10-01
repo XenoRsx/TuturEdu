@@ -423,6 +423,13 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                             spacing: 8,
                             children: [
                               ChoiceChip(
+                                avatar: Icon(
+                                  Icons.flash_on_rounded,
+                                  size: 16,
+                                  color: _mode == 'live'
+                                      ? QuizTheme.primaryDark
+                                      : Colors.grey.shade600,
+                                ),
                                 label: const Text('Live Session'),
                                 selected: _mode == 'live',
                                 onSelected: (_) =>
@@ -432,6 +439,13 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                                 ),
                               ),
                               ChoiceChip(
+                                avatar: Icon(
+                                  Icons.schedule_rounded,
+                                  size: 16,
+                                  color: _mode == 'self_paced'
+                                      ? QuizTheme.primaryDark
+                                      : Colors.grey.shade600,
+                                ),
                                 label: const Text('Self-Paced'),
                                 selected: _mode == 'self_paced',
                                 onSelected: (_) =>
@@ -441,6 +455,13 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                                 ),
                               ),
                               ChoiceChip(
+                                avatar: Icon(
+                                  Icons.call_merge_rounded,
+                                  size: 16,
+                                  color: _mode == 'both'
+                                      ? QuizTheme.primaryDark
+                                      : Colors.grey.shade600,
+                                ),
                                 label: const Text('Both'),
                                 selected: _mode == 'both',
                                 onSelected: (_) =>
@@ -627,8 +648,22 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
                       width: 28,
                       height: 28,
                       decoration: BoxDecoration(
-                        color: badgeColor,
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            badgeColor,
+                            badgeColor.withValues(alpha: 0.75),
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: badgeColor.withValues(alpha: 0.4),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       alignment: Alignment.center,
                       child: Text(

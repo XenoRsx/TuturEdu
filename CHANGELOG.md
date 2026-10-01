@@ -19,8 +19,73 @@ was committed.
   proper error handling in `_load()` so any future failure shows a message
   instead of spinning forever.
 
+### Fixed
+
+- **Log Out button doing nothing when pressed** — `push_notifications.dart`'s
+  `unregisterPushToken()`, called from every logout path (all 3 dashboards
+  plus Settings) as well as the push-toggle-off and Delete Account flows,
+  awaited `FirebaseMessaging.getToken()` with no timeout. If that call ever
+  hung (no service worker, a browser promise that never resolves), the whole
+  awaiting caller froze silently with no error shown — looked exactly like
+  the button did nothing. Fixed with a 5-second timeout that falls back to
+  `null`, which every caller already handled gracefully.
+
 ### Added
 
+- **Delete Chat** — long-press a chat (1:1 or group) for "Delete for Me"
+  (hides it from your list only; it comes back automatically the moment
+  anyone sends a new message, same as WhatsApp) or "Delete for Everyone"
+  (permanently deletes the chat and every message in it, for everyone —
+  only offered for a 1:1 chat or when you're the group admin). Also: a
+  chat created by tapping "Message" on someone's profile, before any
+  message is actually sent, no longer shows up in the chat list as "Start
+  the conversation..." — it simply stays hidden until the first real
+  message goes through. `firestore.rules`' long-standing `allow delete:
+  if false` on chats and messages was deliberately relaxed for this, scoped
+  narrowly (see CLAUDE.md for why this doesn't weaken the existing
+  soft-delete-message audit trail).
+- **Announcements** — Teachers can post an announcement to every Student
+  enrolled in one of their subjects (Settings → My Announcements → New).
+  Students see them in a new Announcements screen (also in Settings), with
+  unread ones highlighted; opening one marks it read, and the teacher
+  sees "Seen by N" per announcement. A new `onNewAnnouncement` Cloud
+  Function pushes a notification to each enrolled student. New
+  `announcements` Firestore rules: teachers may only post to subjects they
+  teach, and students may only add themselves to `readBy`. No composite
+  indexes needed.
+- **Role-colored avatars/labels** — a new shared `UserAvatar` widget (a
+  tinted initial circle colored by the user's role - Teacher=green,
+  Student=blue, Parent=orange, Admin=purple, matching each dashboard's
+  color) replaced the flat-colored `CircleAvatar` that used to be
+  copy-pasted across several screens (chat list, profiles, user search,
+  group member list, Admin's user list, Settings). The group-chat
+  sender-name label above each message is also now colored by the sender's
+  role instead of a fixed blue for everyone. (An earlier version of this
+  work also added real profile picture upload, but that was pulled back out
+  after the photo failed to render on Web due to a Storage CORS
+  configuration gap — see the note in CLAUDE.md if it's revisited.)
+- **Quiz module UI/UX polish pass** — introduced shared `QuizCard`/`QuizBadge`
+  widgets (`lib/utils/quiz_theme.dart`) to replace the hand-rolled white
+  shadow-card pattern that had been copy-pasted across 5 quiz screens.
+  "My Quizzes" cards now show mode/question-count badges and fold Edit +
+  Delete into a single kebab menu instead of a row of 3-4 icons; the
+  Self-Paced quiz list and attempt screen now surface due dates and
+  attempts-used as badges (previously not shown until you opened the quiz);
+  the attempt screen's score header got a circular percentage ring; the
+  teacher results screen got icons on its summary stats. Visual-only
+  change — no schema or `firestore.rules` changes.
+- **Live Session Quiz: per-question results/leaderboard + auto-skip timer** —
+  after each question, the session now enters an interim "results" phase
+  showing a leaderboard scoped to that question (correct answer + points
+  earned this round, via the shared `QuizLeaderboardView`, now generalized
+  with optional `title`/`subtitle`/`pointsThisRound`/`footer` params) before
+  moving on, instead of jumping straight to the next question. This phase is
+  triggered automatically the moment EITHER the countdown reaches 0 OR every
+  joined participant has answered — no more waiting out the full timer once
+  everyone's done. Teachers can also end a question early with a new "End
+  Question Now" button. Pacing between questions (advancing after results,
+  or showing the final leaderboard on the last question) stays a manual
+  teacher action. No `firestore.rules` change was needed.
 - **Edit Quiz** — `create_quiz_screen.dart` now doubles as an edit form (optional
   `quizId` param): a new Edit icon in "My Quizzes" opens it pre-filled with the
   existing quiz's title, subject, mode, retake/due-date settings, and every

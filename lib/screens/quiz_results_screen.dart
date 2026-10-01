@@ -104,9 +104,11 @@ class _QuizResultsScreenState extends State<QuizResultsScreen> {
     }
   }
 
-  Widget _summaryStat(String value, String label) {
+  Widget _summaryStat(IconData icon, Color color, String value, String label) {
     return Column(
       children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(height: 4),
         Text(
           value,
           style: const TextStyle(
@@ -162,29 +164,29 @@ class _QuizResultsScreenState extends State<QuizResultsScreen> {
                 )
               : Column(
                   children: [
-                    Container(
+                    QuizCard(
                       margin: const EdgeInsets.all(12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: QuizTheme.primary.withValues(alpha: 0.08),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _summaryStat('$attemptedCount', 'Completed'),
                           _summaryStat(
+                            Icons.check_circle_outline,
+                            Colors.green,
+                            '$attemptedCount',
+                            'Completed',
+                          ),
+                          _summaryStat(
+                            Icons.hourglass_empty_rounded,
+                            Colors.grey,
                             '${_results.length - attemptedCount}',
                             'Not Attempted',
                           ),
-                          _summaryStat('${_results.length}', 'Total Students'),
+                          _summaryStat(
+                            Icons.groups_outlined,
+                            QuizTheme.primary,
+                            '${_results.length}',
+                            'Total Students',
+                          ),
                         ],
                       ),
                     ),
@@ -197,21 +199,9 @@ class _QuizResultsScreenState extends State<QuizResultsScreen> {
                           final percentage = r.totalPoints == 0
                               ? 0
                               : (r.score / r.totalPoints * 100).round();
-                          return Container(
+                          return QuizCard(
                             margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: QuizTheme.primary.withValues(
-                                    alpha: 0.06,
-                                  ),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
+                            padding: EdgeInsets.zero,
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: r.attempted
@@ -247,24 +237,10 @@ class _QuizResultsScreenState extends State<QuizResultsScreen> {
                                 ),
                               ),
                               trailing: r.attempted
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green.withValues(
-                                          alpha: 0.1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '$percentage%',
-                                        style: const TextStyle(
-                                          color: Colors.green,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                  ? QuizBadge(
+                                      icon: Icons.emoji_events_outlined,
+                                      label: '$percentage%',
+                                      color: Colors.green,
                                     )
                                   : const Icon(
                                       Icons.hourglass_empty,

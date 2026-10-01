@@ -24,10 +24,22 @@ import 'package:flutter/foundation.dart';
 const String _webVapidKey =
     'BG5DcX-LFCmkPhr9yBQF2WoZB92e888RiQAhW9hETXA5cqAWu-6T7CIChRaY3L975h9Da_c-V071fhOjLP3LQ0g';
 
+// Real bug found 2026-09 ("Log Out button does nothing when pressed"):
+// FirebaseMessaging.getToken() has no built-in timeout, and every caller
+// here (registerPushToken/unregisterPushToken) awaits it directly - if it
+// hangs (e.g. no service worker registered, browser silently never
+// resolving the permission/token promise), the awaiting caller hangs
+// forever too. unregisterPushToken() is called from EVERY logout path
+// (chat_list_screen.dart, admin_dashboard.dart, settings_screen.dart) plus
+// Settings' push-toggle-off and Delete Account, so a hang here silently
+// froze all of those with zero visible error - looked exactly like "the
+// button does nothing". A 5-second timeout falling back to null lets every
+// caller's existing `if (token == null) return;` handle it gracefully,
+// consistent with this file's "best-effort, never block on push" philosophy.
 Future<String?> _currentToken() {
-  return FirebaseMessaging.instance.getToken(
-    vapidKey: _webVapidKey.isEmpty ? null : _webVapidKey,
-  );
+  return FirebaseMessaging.instance
+      .getToken(vapidKey: _webVapidKey.isEmpty ? null : _webVapidKey)
+      .timeout(const Duration(seconds: 5), onTimeout: () => null);
 }
 
 /// Requests notification permission and, if granted, saves this device's

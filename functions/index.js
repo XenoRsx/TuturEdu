@@ -120,6 +120,43 @@ exports.onNewWarningLetter = onDocumentCreated(
   }
 );
 
+// New announcement -> notify every Student enrolled in its subject (see
+// BLUEPRINT.md 5.19). Queries on `subjects array-contains` only and filters
+// role in code rather than adding `role ==` to the query - combining the two
+// on different fields would need a composite index, and the Teacher(s) of
+// that subject are the only non-students this can match anyway.
+exports.onNewAnnouncement = onDocumentCreated(
+  "announcements/{announcementId}",
+  async (event) => {
+    const announcement = event.data?.data();
+    if (!announcement?.subjectLevel) return;
+
+    const usersSnap = await db
+      .collection("users")
+      .where("subjects", "array-contains", announcement.subjectLevel)
+      .get();
+
+    const students = usersSnap.docs.filter((doc) => doc.data().role === "Student");
+    if (students.length === 0) return;
+
+    const body = (announcement.body || "").length > 120
+      ? `${announcement.body.slice(0, 117)}...`
+      : (announcement.body || "New announcement");
+
+    await Promise.all(
+      students.map((doc) =>
+        sendAndPruneTokens(
+          doc.id,
+          doc.data().fcmTokens || [],
+          { title: `📢 ${announcement.subjectLevel}: ${announcement.title || "Announcement"}`, body },
+          { type: "announcement", announcementId: event.params.announcementId },
+          doc.data().notificationSound
+        )
+      )
+    );
+  }
+);
+
 // Admin-only: permanently deletes ANOTHER user's account (Firebase Auth +
 // Firestore profile). Needs the Admin SDK - the client SDK can only ever
 // delete the CURRENTLY signed-in user's own account (see

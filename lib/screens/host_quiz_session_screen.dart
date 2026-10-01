@@ -1,13 +1,29 @@
 // lib/screens/host_quiz_session_screen.dart
 //
 // Teacher screen: hosts a Live Session for a quiz (see BLUEPRINT.md 9.3).
-// Three phases driven by quizSessions/{sessionId}.status:
-//   waiting -> shows the join code + live roster of joined students
-//   active  -> shows the current question + live "X/Y answered" count,
-//              "Next Question" advances currentQuestionIndex (and resets
-//              currentQuestionStartedAt so every student's timer re-syncs)
-//   ended   -> final leaderboard, podium-style for the top 3
+// Four phases driven by quizSessions/{sessionId}.status:
+//   waiting          -> shows the join code + live roster of joined students
+//   active           -> shows the current question + live "X/Y answered"
+//                        count + a countdown (same timeLimitSeconds every
+//                        student sees, re-synced from currentQuestionStartedAt)
+//   question_results -> per-question leaderboard (QuizLeaderboardView with
+//                        pointsThisRound) + the correct answer, before
+//                        advancing to the next question
+//   ended            -> final leaderboard, podium-style for the top 3
+//
+// active -> question_results is AUTOMATIC (_maybeAutoEndQuestion, checked
+// every tick via the same 1-second ticker pattern as
+// live_quiz_play_screen.dart's countdown): it fires the moment EITHER the
+// timer reaches 0 OR every joined participant has answered - "skip timer"
+// once everyone's done, no need to wait out the full time limit. A teacher
+// can also always force it early via "End Question Now" (e.g. one student
+// goes AFK and never answers) - same underlying _endQuestion() write either
+// way, so there's no behavioral difference between the two triggers.
+// question_results -> active (next question) / ended is still a manual
+// "Next Question"/"Show Final Leaderboard" tap - teacher controls pacing
+// between questions, only the answer-collection phase auto-advances.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/quiz_theme.dart';
@@ -29,11 +45,28 @@ class HostQuizSessionScreen extends StatefulWidget {
 
 class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
   List<QueryDocumentSnapshot>? _questions;
+  Timer? _ticker;
+
+  // Guards _maybeAutoEndQuestion so it only writes 'question_results' ONCE
+  // per question - it's re-checked on every 1-second tick and every
+  // participants-stream event, but re-arms naturally the moment
+  // currentQuestionIndex moves on to a new question (this no longer
+  // matches it), so no explicit reset is needed between questions.
+  int? _autoEndedForIndex;
 
   @override
   void initState() {
     super.initState();
     _loadQuestions();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadQuestions() async {
@@ -53,8 +86,9 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
     if (mounted) setState(() => _questions = questionsSnap.docs);
   }
 
-  DocumentReference get _sessionRef =>
-      FirebaseFirestore.instance.collection('quizSessions').doc(widget.sessionId);
+  DocumentReference get _sessionRef => FirebaseFirestore.instance
+      .collection('quizSessions')
+      .doc(widget.sessionId);
 
   Future<void> _startQuiz() async {
     await _sessionRef.update({
@@ -76,9 +110,29 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
       });
     } else {
       await _sessionRef.update({
+        'status': 'active',
         'currentQuestionIndex': currentIndex + 1,
         'currentQuestionStartedAt': FieldValue.serverTimestamp(),
       });
+    }
+  }
+
+  Future<void> _endQuestion() async {
+    await _sessionRef.update({'status': 'question_results'});
+  }
+
+  void _maybeAutoEndQuestion(
+    int currentIndex,
+    int remaining,
+    int answeredCount,
+    int participantCount,
+  ) {
+    if (_autoEndedForIndex == currentIndex) return;
+    final allAnswered =
+        participantCount > 0 && answeredCount >= participantCount;
+    if (remaining <= 0 || allAnswered) {
+      _autoEndedForIndex = currentIndex;
+      _endQuestion();
     }
   }
 
@@ -99,10 +153,12 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final session = sessionSnapshot.data!.data() as Map<String, dynamic>;
+                final session =
+                    sessionSnapshot.data!.data() as Map<String, dynamic>;
                 final status = session['status'] ?? 'waiting';
                 final joinCode = session['joinCode'] ?? '------';
-                final currentIndex = session['currentQuestionIndex'] as int? ?? 0;
+                final currentIndex =
+                    session['currentQuestionIndex'] as int? ?? 0;
 
                 return StreamBuilder<QuerySnapshot>(
                   stream: _sessionRef.collection('participants').snapshots(),
@@ -112,7 +168,9 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
                     if (status == 'waiting') {
                       return _buildWaitingRoom(joinCode, participants);
                     } else if (status == 'active') {
-                      return _buildActiveQuestion(currentIndex, participants);
+                      return _buildActiveQuestion(session, participants);
+                    } else if (status == 'question_results') {
+                      return _buildQuestionResults(currentIndex, participants);
                     } else {
                       return QuizLeaderboardView(
                         participants: participants,
@@ -126,7 +184,10 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
     );
   }
 
-  Widget _buildWaitingRoom(String joinCode, List<QueryDocumentSnapshot> participants) {
+  Widget _buildWaitingRoom(
+    String joinCode,
+    List<QueryDocumentSnapshot> participants,
+  ) {
     return Column(
       children: [
         Container(
@@ -137,16 +198,28 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
             children: [
               const Text(
                 'JOIN CODE',
-                style: TextStyle(fontSize: 13, color: Colors.white70, letterSpacing: 2, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white70,
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 16, offset: const Offset(0, 6)),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
                   ],
                 ),
                 child: Text(
@@ -171,7 +244,10 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
               const SizedBox(width: 6),
               Text(
                 '${participants.length} player(s) joined',
-                style: const TextStyle(fontWeight: FontWeight.w700, color: QuizTheme.primaryDark),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: QuizTheme.primaryDark,
+                ),
               ),
             ],
           ),
@@ -193,16 +269,25 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
                     children: participants.map((doc) {
                       final data = doc.data() as Map<String, dynamic>;
                       final name = data['name'] ?? 'Student';
-                      final color = QuizTheme.optionColors[name.hashCode.abs() % QuizTheme.optionColors.length];
+                      final color =
+                          QuizTheme.optionColors[name.hashCode.abs() %
+                              QuizTheme.optionColors.length];
                       return Chip(
                         avatar: CircleAvatar(
                           backgroundColor: color,
                           child: Text(
                             name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                        label: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        label: Text(
+                          name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         backgroundColor: color.withValues(alpha: 0.08),
                         side: BorderSide(color: color.withValues(alpha: 0.3)),
                       );
@@ -219,11 +304,16 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
               child: ElevatedButton.icon(
                 onPressed: participants.isEmpty ? null : _startQuiz,
                 icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Start Quiz', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Start Quiz',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: QuizTheme.primary,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   elevation: 2,
                 ),
               ),
@@ -234,8 +324,12 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
     );
   }
 
-  Widget _buildActiveQuestion(int currentIndex, List<QueryDocumentSnapshot> participants) {
+  Widget _buildActiveQuestion(
+    Map<String, dynamic> session,
+    List<QueryDocumentSnapshot> participants,
+  ) {
     final questions = _questions!;
+    final currentIndex = session['currentQuestionIndex'] as int? ?? 0;
     if (currentIndex >= questions.length) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -243,11 +337,33 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
     final question = questions[currentIndex].data() as Map<String, dynamic>;
     final questionId = questions[currentIndex].id;
     final options = List<String>.from(question['options'] ?? []);
+    final timeLimit = question['timeLimitSeconds'] as int? ?? 20;
+    final startedAt = session['currentQuestionStartedAt'] as Timestamp?;
+    final elapsedSeconds = startedAt == null
+        ? 0
+        : DateTime.now().difference(startedAt.toDate()).inSeconds;
+    final remaining = (timeLimit - elapsedSeconds).clamp(0, timeLimit);
+    final progress = timeLimit == 0 ? 0.0 : remaining / timeLimit;
     final answeredCount = participants.where((p) {
-      final answers = (p.data() as Map<String, dynamic>)['answers'] as Map<String, dynamic>?;
+      final answers =
+          (p.data() as Map<String, dynamic>)['answers']
+              as Map<String, dynamic>?;
       return answers != null && answers.containsKey(questionId);
     }).length;
-    final isLastQuestion = currentIndex >= questions.length - 1;
+
+    // Skip-the-timer: the moment every joined participant has answered (or
+    // the timer itself hits 0), move on to question_results automatically -
+    // see the class-level doc comment for why this is safe to call on every
+    // rebuild (guarded by _autoEndedForIndex).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _maybeAutoEndQuestion(
+        currentIndex,
+        remaining,
+        answeredCount,
+        participants.length,
+      );
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,17 +372,59 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
           width: double.infinity,
           decoration: const BoxDecoration(gradient: QuizTheme.heroGradient),
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'QUESTION ${currentIndex + 1} OF ${questions.length}',
-                style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'QUESTION ${currentIndex + 1} OF ${questions.length}',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      question['text'] ?? '',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                question['text'] ?? '',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: progress,
+                      strokeWidth: 4,
+                      backgroundColor: Colors.white24,
+                      valueColor: AlwaysStoppedAnimation(
+                        remaining <= 5 ? Colors.redAccent : Colors.white,
+                      ),
+                    ),
+                    Text(
+                      '$remaining',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -281,31 +439,49 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
               childAspectRatio: 2.2,
               children: List.generate(options.length, (i) {
                 final isCorrect = i == question['correctIndex'];
-                final color = QuizTheme.optionColors[i % QuizTheme.optionColors.length];
+                final color =
+                    QuizTheme.optionColors[i % QuizTheme.optionColors.length];
                 return Container(
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(14),
-                    border: isCorrect ? Border.all(color: Colors.white, width: 3) : null,
+                    border: isCorrect
+                        ? Border.all(color: Colors.white, width: 3)
+                        : null,
                     boxShadow: [
-                      BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 4)),
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
                   ),
                   padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
-                      Icon(QuizTheme.optionIcons[i % QuizTheme.optionIcons.length],
-                          color: Colors.white, size: 20),
+                      Icon(
+                        QuizTheme.optionIcons[i % QuizTheme.optionIcons.length],
+                        color: Colors.white,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           options[i],
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 2,
                         ),
                       ),
-                      if (isCorrect) const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                      if (isCorrect)
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                     ],
                   ),
                 );
@@ -315,35 +491,78 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            '$answeredCount / ${participants.length} player(s) answered',
-            style: const TextStyle(fontWeight: FontWeight.w700, color: QuizTheme.primaryDark),
-          ),
-        ),
-        SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () => _nextQuestionOrEnd(currentIndex),
-                icon: Icon(isLastQuestion ? Icons.flag_rounded : Icons.arrow_forward_rounded),
-                label: Text(
-                  isLastQuestion ? 'End Quiz' : 'Next Question',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: QuizTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 2,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$answeredCount / ${participants.length} player(s) answered',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: QuizTheme.primaryDark,
                 ),
               ),
-            ),
+              TextButton(
+                onPressed: _endQuestion,
+                child: const Text('End Question Now'),
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 8),
       ],
+    );
+  }
+
+  Widget _buildQuestionResults(
+    int currentIndex,
+    List<QueryDocumentSnapshot> participants,
+  ) {
+    final questions = _questions!;
+    if (currentIndex >= questions.length) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final question = questions[currentIndex].data() as Map<String, dynamic>;
+    final questionId = questions[currentIndex].id;
+    final options = List<String>.from(question['options'] ?? []);
+    final correctIndex = question['correctIndex'] as int? ?? 0;
+    final points = question['points'] as int? ?? 100;
+    final isLastQuestion = currentIndex >= questions.length - 1;
+    final correctAnswerText = correctIndex < options.length
+        ? options[correctIndex]
+        : '';
+
+    return QuizLeaderboardView(
+      participants: participants,
+      title: 'Question ${currentIndex + 1} Results',
+      subtitle: 'Correct answer: $correctAnswerText',
+      pointsThisRound: QuizLeaderboardView.pointsEarnedForQuestion(
+        participants,
+        questionId,
+        points,
+      ),
+      footer: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton.icon(
+          onPressed: () => _nextQuestionOrEnd(currentIndex),
+          icon: Icon(
+            isLastQuestion ? Icons.flag_rounded : Icons.arrow_forward_rounded,
+          ),
+          label: Text(
+            isLastQuestion ? 'Show Final Leaderboard' : 'Next Question',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: QuizTheme.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            elevation: 2,
+          ),
+        ),
+      ),
     );
   }
 }

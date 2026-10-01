@@ -15,7 +15,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../utils/role_colors.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/user_avatar.dart';
 import 'link_parent_child_screen.dart';
 
 class ManageUsersScreen extends StatefulWidget {
@@ -300,19 +302,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     }
   }
 
-  Color _roleColor(String role) {
-    switch (role) {
-      case 'Teacher':
-        return Colors.green;
-      case 'Parent':
-        return Colors.orange;
-      case 'Admin':
-        return Colors.purple;
-      default:
-        return Colors.blue;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -430,15 +419,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           horizontal: 14,
                           vertical: 4,
                         ),
-                        leading: CircleAvatar(
-                          backgroundColor: _roleColor(
-                            role,
-                          ).withValues(alpha: 0.15),
-                          child: Text(
-                            name.isNotEmpty ? name[0].toUpperCase() : '?',
-                            style: TextStyle(color: _roleColor(role)),
-                          ),
-                        ),
+                        leading: UserAvatar(name: name, role: role),
                         title: Text(
                           name,
                           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -459,7 +440,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                                   color: Colors.white,
                                 ),
                               ),
-                              backgroundColor: _roleColor(role),
+                              backgroundColor: roleColor(role),
                               padding: EdgeInsets.zero,
                               visualDensity: VisualDensity.compact,
                             ),

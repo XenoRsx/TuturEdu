@@ -23,7 +23,6 @@ dependencies:
   audioplayers: ^6.8.1
   cloud_functions: ^6.3.6
   font_awesome_flutter: ^11.0.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
