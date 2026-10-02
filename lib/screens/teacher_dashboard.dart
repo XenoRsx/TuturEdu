@@ -15,6 +15,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/stat_tile.dart';
 import 'chat_list_screen.dart';
@@ -42,8 +43,14 @@ class TeacherDashboard extends StatelessWidget {
         SnackBar(
           content: Text(
             newStatus == 'off_duty'
-                ? "You're now Off-Duty. Your chats are locked until you go back on-duty."
-                : "You're now On-Duty. Your chats follow the normal office-hour schedule again.",
+                ? context.tr(
+                    'You\'re now Off-Duty. Your chats are locked until you '
+                    'go back on-duty.',
+                  )
+                : context.tr(
+                    'You\'re now On-Duty. Your chats follow the normal '
+                    'office-hour schedule again.',
+                  ),
           ),
         ),
       );
@@ -81,10 +88,12 @@ class TeacherDashboard extends StatelessWidget {
 
         return IconButton(
           tooltip: onLeave
-              ? 'You are on leave (set in Settings) — chats are locked'
+              ? context.tr(
+                  'You are on leave (set in Settings) — chats are locked',
+                )
               : offDuty
-              ? 'You are Off-Duty — tap to go On-Duty'
-              : 'You are On-Duty — tap to go Off-Duty',
+              ? context.tr('You are Off-Duty — tap to go On-Duty')
+              : context.tr('You are On-Duty — tap to go Off-Duty'),
           icon: Icon(
             onLeave
                 ? Icons.beach_access_outlined
@@ -113,16 +122,18 @@ class TeacherDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1A1B8E5A),
                 child: Icon(Icons.person_add_alt, color: Colors.green),
               ),
-              title: const Text('New Chat'),
-              subtitle: const Text('Search a student and start a 1:1 chat'),
+              title: Text(context.tr('New Chat')),
+              subtitle: Text(
+                context.tr('Search a student and start a 1:1 chat'),
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const UserSearchScreen(
+                    builder: (_) => UserSearchScreen(
                       targetRole: 'Student',
-                      title: 'Find a Student',
+                      title: context.tr('Find a Student'),
                       accentColor: Colors.green,
                     ),
                   ),
@@ -134,8 +145,10 @@ class TeacherDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1A1B8E5A),
                 child: Icon(Icons.group_add, color: Colors.green),
               ),
-              title: const Text('New Group'),
-              subtitle: const Text('Create a group chat for a subject/class'),
+              title: Text(context.tr('New Group')),
+              subtitle: Text(
+                context.tr('Create a group chat for a subject/class'),
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
@@ -161,22 +174,26 @@ class TeacherDashboard extends StatelessWidget {
   }) {
     return DashboardHeader(
       stats: [
-        StatTile(value: '$totalUnread', label: 'Unread', color: Colors.green),
+        StatTile(
+          value: '$totalUnread',
+          label: context.tr('Unread'),
+          color: Colors.green,
+        ),
         StatTile(
           value: '$totalChats',
-          label: 'Total Chats',
+          label: context.tr('Total Chats'),
           color: Colors.blue,
         ),
         StatTile(
           value: '$totalGroups',
-          label: 'Groups',
+          label: context.tr('Groups'),
           color: Colors.deepPurple,
         ),
       ],
       actions: [
         QuickAction(
           icon: Icons.fact_check_outlined,
-          label: 'Attendance',
+          label: context.tr('Attendance'),
           color: Colors.green,
           onTap: () => Navigator.push(
             context,
@@ -185,7 +202,7 @@ class TeacherDashboard extends StatelessWidget {
         ),
         QuickAction(
           icon: Icons.insights_outlined,
-          label: 'Performance',
+          label: context.tr('Performance'),
           color: Colors.blue,
           onTap: () => Navigator.push(
             context,
@@ -194,7 +211,7 @@ class TeacherDashboard extends StatelessWidget {
         ),
         QuickAction(
           icon: Icons.quiz_outlined,
-          label: 'Quizzes',
+          label: context.tr('Quizzes'),
           color: Colors.deepPurple,
           onTap: () => Navigator.push(
             context,
@@ -213,7 +230,7 @@ class TeacherDashboard extends StatelessWidget {
       extraActions: [
         _buildDutyToggle(context),
         IconButton(
-          tooltip: 'Settings',
+          tooltip: context.tr('Settings'),
           icon: const Icon(Icons.settings_outlined),
           onPressed: () => Navigator.push(
             context,

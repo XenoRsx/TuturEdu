@@ -10,6 +10,7 @@
 // switch which child they're looking at when there's more than one.
 
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -100,9 +101,9 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
   }
 
   String _categoryFor(num percentage) {
-    if (percentage >= _kSafeMinPercentage) return 'Safe';
-    if (percentage >= _kAtRiskMinPercentage) return 'At-Risk';
-    return 'Barred';
+    if (percentage >= _kSafeMinPercentage) return context.tr('Safe');
+    if (percentage >= _kAtRiskMinPercentage) return context.tr('At-Risk');
+    return context.tr('Barred');
   }
 
   Color _categoryColor(num percentage) {
@@ -114,11 +115,11 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
   String _trendLabel(String trend) {
     switch (trend) {
       case 'critical':
-        return 'Critical';
+        return context.tr('Critical');
       case 'dropping':
-        return 'Dropping';
+        return context.tr('Dropping');
       default:
-        return 'Steady';
+        return context.tr('Steady');
     }
   }
 
@@ -147,7 +148,11 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
     final selected = _selectedChild;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_loading ? 'My Child' : (selected?.name ?? 'My Child')),
+        title: Text(
+          _loading
+              ? context.tr('My Child')
+              : (selected?.name ?? context.tr('My Child')),
+        ),
         backgroundColor: Colors.orange,
         actions: [
           // Child picker - only shown once there's actually a choice to
@@ -183,9 +188,9 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                 indicatorColor: Colors.white,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white70,
-                tabs: const [
-                  Tab(text: 'Attendance'),
-                  Tab(text: 'Performance'),
+                tabs: [
+                  Tab(text: context.tr('Attendance')),
+                  Tab(text: context.tr('Performance')),
                 ],
               ),
       ),
@@ -204,9 +209,11 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                       color: Colors.grey.shade300,
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      "Your account isn't linked to a student yet. "
-                      'Please contact an Admin to link your child.',
+                    Text(
+                      context.tr(
+                        'Your account isn\'t linked to a student yet. '
+                        'Please contact an Admin to link your child.',
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -245,7 +252,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
         if (records.isEmpty) {
           return Center(
             child: Text(
-              'No attendance records yet.',
+              context.tr('No attendance records yet.'),
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodySmall?.color,
               ),
@@ -289,14 +296,17 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                     ),
                   ),
                   Text(
-                    'Attendance Rate',
+                    context.tr('Attendance Rate'),
                     style: TextStyle(
                       color: Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '$attended / ${records.length} classes attended',
+                    context.tr('{a} / {t} classes attended', {
+                      'a': attended,
+                      't': records.length,
+                    }),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   if (isLow) ...[
@@ -311,7 +321,9 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Low attendance warning (below $_kLowAttendanceThreshold%)',
+                          context.tr('Low attendance warning (below {n}%)', {
+                            'n': _kLowAttendanceThreshold,
+                          }),
                           style: const TextStyle(
                             color: Colors.red,
                             fontWeight: FontWeight.w600,
@@ -343,7 +355,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                       title: Text(subject),
                       subtitle: Text(date != null ? _formatDate(date) : ''),
                       trailing: Text(
-                        present ? 'Present' : 'Absent',
+                        present ? context.tr('Present') : context.tr('Absent'),
                         style: TextStyle(
                           color: present ? Colors.green : Colors.red,
                           fontWeight: FontWeight.w600,
@@ -364,7 +376,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
     if (childSubjects.isEmpty) {
       return Center(
         child: Text(
-          'No subjects enrolled yet.',
+          context.tr('No subjects enrolled yet.'),
           style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
         ),
       );
@@ -405,7 +417,7 @@ class _ChildOverviewScreenState extends State<ChildOverviewScreen>
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: percentage == null
-                    ? const Text('Not graded yet')
+                    ? Text(context.tr('Not graded yet'))
                     : Row(
                         children: [
                           Text(

@@ -25,6 +25,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../utils/quiz_theme.dart';
 import 'quiz_leaderboard_view.dart';
 
@@ -40,6 +41,7 @@ class LiveQuizPlayScreen extends StatefulWidget {
 class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
   List<QueryDocumentSnapshot>? _questions;
   Timer? _ticker;
+  String? _submittingQuestionId;
 
   @override
   void initState() {
@@ -77,29 +79,32 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
       .collection('quizSessions')
       .doc(widget.sessionId);
 
-  Future<void> _submitAnswer(
-    String questionId,
-    int selectedIndex,
-    int correctIndex,
-    int points,
-    int timeTakenMs,
-  ) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
-
-    final isCorrect = selectedIndex == correctIndex;
-    final participantRef = _sessionRef
-        .collection('participants')
-        .doc(currentUser.uid);
-
-    await participantRef.update({
-      'answers.$questionId': {
+  // Scored server-side (BLUEPRINT.md 9.8): this device never sees the
+  // answer key, and can no longer write its own `answers`/`score` -
+  // submitLiveAnswer checks the answer, the time limit and "already
+  // answered", then writes answers.{questionId} (including correctIndex,
+  // so the reveal below works) and increments score itself. The participant
+  // doc stream picks that write up and redraws the options.
+  Future<void> _submitAnswer(String questionId, int selectedIndex) async {
+    if (_submittingQuestionId != null) return;
+    setState(() => _submittingQuestionId = questionId);
+    try {
+      await FirebaseFunctions.instanceFor(
+        region: 'asia-southeast1',
+      ).httpsCallable('submitLiveAnswer').call({
+        'sessionId': widget.sessionId,
+        'questionId': questionId,
         'selectedIndex': selectedIndex,
-        'correct': isCorrect,
-        'timeTakenMs': timeTakenMs,
-      },
-      if (isCorrect) 'score': FieldValue.increment(points),
-    });
+      });
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Could not submit answer.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submittingQuestionId = null);
+    }
   }
 
   @override
@@ -216,8 +221,6 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
     final questionId = questionDoc.id;
     final options = List<String>.from(question['options'] ?? []);
     final timeLimit = question['timeLimitSeconds'] as int? ?? 20;
-    final correctIndex = question['correctIndex'] as int? ?? 0;
-    final points = question['points'] as int? ?? 100;
 
     final startedAt = session['currentQuestionStartedAt'] as Timestamp?;
     final elapsedSeconds = startedAt == null
@@ -234,6 +237,10 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
         final myAnswer = myAnswers[questionId] as Map<String, dynamic>?;
         final alreadyAnswered = myAnswer != null;
         final timedOut = remaining <= 0 && !alreadyAnswered;
+        // Only known once submitLiveAnswer has scored this answer - this
+        // device never has the answer key before then.
+        final correctIndex = myAnswer?['correctIndex'] as int?;
+        final submitting = _submittingQuestionId == questionId;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,15 +336,9 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
                           : 1.0,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        onTap: (alreadyAnswered || timedOut)
+                        onTap: (alreadyAnswered || timedOut || submitting)
                             ? null
-                            : () => _submitAnswer(
-                                questionId,
-                                i,
-                                correctIndex,
-                                points,
-                                (timeLimit - remaining) * 1000,
-                              ),
+                            : () => _submitAnswer(questionId, i),
                         child: Container(
                           decoration: BoxDecoration(
                             color: tileColor,
@@ -452,17 +453,24 @@ class _LiveQuizPlayScreenState extends State<LiveQuizPlayScreen> {
     final question = questionDoc.data() as Map<String, dynamic>;
     final questionId = questionDoc.id;
     final options = List<String>.from(question['options'] ?? []);
-    final correctIndex = question['correctIndex'] as int? ?? 0;
+    // Published by the host onto the session doc only once the question
+    // has closed (host_quiz_session_screen.dart's _endQuestion) - students
+    // can't read the answerKeys subcollection itself.
+    final revealed = (session['revealedAnswers'] as Map?)?[questionId];
+    final correctIndex = revealed is int ? revealed : null;
     final points = question['points'] as int? ?? 100;
-    final correctAnswerText = correctIndex < options.length
+    final correctAnswerText =
+        correctIndex != null && correctIndex < options.length
         ? options[correctIndex]
-        : '';
+        : null;
 
     return QuizLeaderboardView(
       participants: participants,
       myUid: myUid,
       title: 'Question ${currentIndex + 1} Results',
-      subtitle: 'Correct answer: $correctAnswerText',
+      subtitle: correctAnswerText != null
+          ? 'Correct answer: $correctAnswerText'
+          : null,
       pointsThisRound: QuizLeaderboardView.pointsEarnedForQuestion(
         participants,
         questionId,

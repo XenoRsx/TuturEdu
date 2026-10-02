@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/app_card.dart';
 import '../widgets/empty_state.dart';
 import 'create_announcement_screen.dart';
@@ -24,20 +25,25 @@ class TeacherAnnouncementsScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Announcement'),
-        content: const Text(
-          'Students will no longer see this announcement. This cannot be '
-          'undone.',
+        title: Text(context.tr('Delete Announcement')),
+        content: Text(
+          context.tr(
+            'Students will no longer see this announcement. This cannot be '
+            'undone.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: Text(
+              context.tr('Delete'),
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -53,19 +59,21 @@ class TeacherAnnouncementsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      return const Scaffold(body: Center(child: Text('Please log in again.')));
+      return Scaffold(
+        body: Center(child: Text(context.tr('Please log in again.'))),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Announcements'),
+        title: Text(context.tr('My Announcements')),
         backgroundColor: Colors.green,
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.campaign_outlined),
-        label: const Text('New'),
+        label: Text(context.tr('New')),
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const CreateAnnouncementScreen()),
@@ -87,10 +95,10 @@ class TeacherAnnouncementsScreen extends StatelessWidget {
           final docs = [...snapshot.data!.docs]..sort(_newestFirst);
 
           if (docs.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.campaign_outlined,
-              title: 'No announcements yet',
-              subtitle: 'Tap "New" to send one to a whole class.',
+              title: context.tr('No announcements yet'),
+              subtitle: context.tr('Tap "New" to send one to a whole class.'),
             );
           }
 
@@ -122,11 +130,11 @@ class TeacherAnnouncementsScreen extends StatelessWidget {
                           ),
                           PopupMenuButton<String>(
                             onSelected: (_) => _confirmDelete(context, doc.id),
-                            itemBuilder: (_) => const [
+                            itemBuilder: (_) => [
                               PopupMenuItem(
                                 value: 'delete',
                                 child: Text(
-                                  'Delete',
+                                  context.tr('Delete'),
                                   style: TextStyle(color: Colors.red),
                                 ),
                               ),
@@ -158,7 +166,9 @@ class TeacherAnnouncementsScreen extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Seen by $seenBy student${seenBy == 1 ? '' : 's'}',
+                            // Counts students AND their parents - both can
+                            // open an announcement now.
+                            context.tr('Seen by {n}', {'n': seenBy}),
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.green,

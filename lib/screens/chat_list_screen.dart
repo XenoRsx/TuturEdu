@@ -34,6 +34,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../utils/push_notifications.dart';
 import '../utils/unread_badge.dart';
 import '../widgets/empty_state.dart';
@@ -185,8 +186,10 @@ class _ChatListScreenState extends State<ChatListScreen>
             const SizedBox(height: 8),
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('Delete for Me'),
-              subtitle: const Text('Removes this chat from your list only'),
+              title: Text(context.tr('Delete for Me')),
+              subtitle: Text(
+                context.tr('Removes this chat from your list only'),
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _confirmDeleteForMe(context, chatId, currentUid);
@@ -195,12 +198,12 @@ class _ChatListScreenState extends State<ChatListScreen>
             if (canDeleteForEveryone)
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text(
-                  'Delete for Everyone',
+                title: Text(
+                  context.tr('Delete for Everyone'),
                   style: TextStyle(color: Colors.red),
                 ),
-                subtitle: const Text(
-                  'Permanently deletes this chat for everyone',
+                subtitle: Text(
+                  context.tr('Permanently deletes this chat for everyone'),
                 ),
                 onTap: () {
                   Navigator.pop(sheetContext);
@@ -222,19 +225,21 @@ class _ChatListScreenState extends State<ChatListScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Chat'),
-        content: const Text(
-          'This removes the chat from your list only. It will come back if '
-          'the other side sends a new message.',
+        title: Text(context.tr('Delete Chat')),
+        content: Text(
+          context.tr(
+            'This removes the chat from your list only. It will come back '
+            'if the other side sends a new message.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            child: Text(context.tr('Delete')),
           ),
         ],
       ),
@@ -246,7 +251,9 @@ class _ChatListScreenState extends State<ChatListScreen>
         'deletedFor.$currentUid': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      if (context.mounted) _showSnack(context, 'Failed to delete chat: $e');
+      if (context.mounted) {
+        _showSnack(context, context.tr('Failed to delete chat: {e}', {'e': e}));
+      }
     }
   }
 
@@ -257,21 +264,23 @@ class _ChatListScreenState extends State<ChatListScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete for Everyone'),
-        content: const Text(
-          'This permanently deletes the entire chat and every message in '
-          'it, for everyone. This cannot be undone.',
+        title: Text(context.tr('Delete for Everyone')),
+        content: Text(
+          context.tr(
+            'This permanently deletes the entire chat and every message in '
+            'it, for everyone. This cannot be undone.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Delete for Everyone',
+            child: Text(
+              context.tr('Delete for Everyone'),
               style: TextStyle(color: Colors.white),
             ),
           ),
@@ -283,7 +292,9 @@ class _ChatListScreenState extends State<ChatListScreen>
     try {
       await _deleteChatForEveryone(chatId);
     } catch (e) {
-      if (context.mounted) _showSnack(context, 'Failed to delete chat: $e');
+      if (context.mounted) {
+        _showSnack(context, context.tr('Failed to delete chat: {e}', {'e': e}));
+      }
     }
   }
 
@@ -458,7 +469,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       future: _getOtherUserInfo(otherUid),
       builder: (context, infoSnapshot) {
         final info = infoSnapshot.data;
-        final name = info?.name ?? 'Loading...';
+        final name = info?.name ?? context.tr('Loading...');
 
         return _buildTile(
           context,
@@ -508,7 +519,9 @@ class _ChatListScreenState extends State<ChatListScreen>
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
-      return const Scaffold(body: Center(child: Text('Please log in again.')));
+      return Scaffold(
+        body: Center(child: Text(context.tr('Please log in again.'))),
+      );
     }
 
     return StreamBuilder<QuerySnapshot>(
@@ -558,7 +571,7 @@ class _ChatListScreenState extends State<ChatListScreen>
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Chats'),
+            title: Text(context.tr('Chats')),
             backgroundColor: widget.appBarColor,
             actions: [
               ...?widget.extraActions,
@@ -596,10 +609,10 @@ class _ChatListScreenState extends State<ChatListScreen>
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
-                    tabs: const [
-                      Tab(text: 'All'),
-                      Tab(text: 'Individual'),
-                      Tab(text: 'Groups'),
+                    tabs: [
+                      Tab(text: context.tr('All')),
+                      Tab(text: context.tr('Individual')),
+                      Tab(text: context.tr('Groups')),
                     ],
                   ),
                 ),
@@ -623,19 +636,19 @@ class _ChatListScreenState extends State<ChatListScreen>
                       context,
                       allChats,
                       currentUser.uid,
-                      'No conversations yet.',
+                      context.tr('No conversations yet.'),
                     ),
                     _buildList(
                       context,
                       individualChats,
                       currentUser.uid,
-                      'No individual chats yet.',
+                      context.tr('No individual chats yet.'),
                     ),
                     _buildList(
                       context,
                       groupChats,
                       currentUser.uid,
-                      'No group chats yet.',
+                      context.tr('No group chats yet.'),
                     ),
                   ],
                 ),

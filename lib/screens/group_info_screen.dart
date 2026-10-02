@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/user_avatar.dart';
 import 'add_group_members_screen.dart';
 import 'user_profile_screen.dart';
@@ -26,17 +27,22 @@ class GroupInfoScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove Member'),
-        content: Text('Remove "$name" from this group?'),
+        title: Text(context.tr('Remove Member')),
+        content: Text(
+          context.tr('Remove "{name}" from this group?', {'name': name}),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+            child: Text(
+              context.tr('Remove'),
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -53,19 +59,22 @@ class GroupInfoScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Leave Group'),
-        content: const Text(
-          'You will no longer receive messages from this group.',
+        title: Text(context.tr('Leave Group')),
+        content: Text(
+          context.tr('You will no longer receive messages from this group.'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Leave', style: TextStyle(color: Colors.white)),
+            child: Text(
+              context.tr('Leave'),
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -88,7 +97,7 @@ class GroupInfoScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Group Info'),
+        title: Text(context.tr('Group Info')),
         backgroundColor: Colors.green,
       ),
       body: StreamBuilder<DocumentSnapshot>(
@@ -154,7 +163,7 @@ class GroupInfoScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${participants.length} member(s)',
+                      context.tr('{n} member(s)', {'n': participants.length}),
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     if (isAdmin)
@@ -172,7 +181,7 @@ class GroupInfoScreen extends StatelessWidget {
                           );
                         },
                         icon: const Icon(Icons.person_add_alt, size: 18),
-                        label: const Text('Add'),
+                        label: Text(context.tr('Add')),
                       ),
                   ],
                 ),
@@ -201,7 +210,7 @@ class GroupInfoScreen extends StatelessWidget {
                         ),
                         title: Text(name),
                         subtitle: isThisAdmin
-                            ? const Text('Group Admin')
+                            ? Text(context.tr('Group Admin'))
                             : null,
                         trailing: isAdmin && !isThisAdmin
                             ? IconButton(
@@ -209,7 +218,7 @@ class GroupInfoScreen extends StatelessWidget {
                                   Icons.person_remove_alt_1,
                                   color: Colors.red,
                                 ),
-                                tooltip: 'Remove member',
+                                tooltip: context.tr('Remove member'),
                                 onPressed: () =>
                                     _removeMember(context, uid, name),
                               )
@@ -237,7 +246,7 @@ class GroupInfoScreen extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: () => _leaveGroup(context, currentUid),
                       icon: const Icon(Icons.logout, size: 18),
-                      label: const Text('Leave Group'),
+                      label: Text(context.tr('Leave Group')),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: const BorderSide(color: Colors.red),

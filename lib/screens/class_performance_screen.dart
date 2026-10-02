@@ -12,6 +12,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/pdf_reports.dart';
 import '../widgets/app_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/stat_bar.dart';
@@ -358,6 +359,15 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
       appBar: AppBar(
         title: const Text('Class Performance'),
         backgroundColor: Colors.green,
+        actions: [
+          if (_selectedSubject != null)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'Export PDF',
+              onPressed: () =>
+                  runPdfExport(context, () => _exportPdf(_selectedSubject!)),
+            ),
+        ],
       ),
       body: _loadingSubjects
           ? const Center(child: CircularProgressIndicator())
@@ -390,6 +400,63 @@ class _ClassPerformanceScreenState extends State<ClassPerformanceScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  // One-shot read of the same data the live screen streams below.
+  Future<void> _exportPdf(String subjectLevel) async {
+    final db = FirebaseFirestore.instance;
+    final studentsSnap = await db
+        .collection('users')
+        .where('role', isEqualTo: 'Student')
+        .where('subjects', arrayContains: subjectLevel)
+        .get();
+    final perfSnap = await _performanceRef(subjectLevel).get();
+    final perfDocs = {for (final d in perfSnap.docs) d.id: d.data()};
+
+    final students = [...studentsSnap.docs]
+      ..sort(
+        (a, b) => (a.data()['name'] as String? ?? '').toLowerCase().compareTo(
+          (b.data()['name'] as String? ?? '').toLowerCase(),
+        ),
+      );
+
+    final counts = {'safe': 0, 'at_risk': 0, 'barred': 0};
+    final graded = <num>[];
+    final rows = <List<String>>[];
+    for (final s in students) {
+      final perf = perfDocs[s.id];
+      final percentage = perf?['percentage'] as num?;
+      final trend = perf?['trend'] as String? ?? 'steady';
+      if (percentage != null) {
+        graded.add(percentage);
+        final cat = _categoryFor(percentage);
+        counts[cat] = (counts[cat] ?? 0) + 1;
+      }
+      rows.add([
+        s.data()['name'] as String? ?? 'Unnamed',
+        percentage == null ? '-' : '${percentage.toStringAsFixed(0)}%',
+        percentage == null
+            ? 'Not graded'
+            : _categoryLabel(_categoryFor(percentage)),
+        percentage == null ? '-' : _trendLabel(trend),
+      ]);
+    }
+    final health = graded.isEmpty
+        ? null
+        : graded.reduce((a, b) => a + b) / graded.length;
+
+    await exportPdfReport(
+      title: 'Class Performance Report',
+      subtitle: subjectLevel,
+      filename: 'performance_${pdfFileSlug(subjectLevel)}.pdf',
+      summaryLines: [
+        'Students enrolled: ${students.length}',
+        'Class health score: ${health == null ? 'No data yet' : '${health.toStringAsFixed(0)}%'}',
+        'Safe: ${counts['safe']}   At-Risk: ${counts['at_risk']}   Barred: ${counts['barred']}',
+      ],
+      headers: const ['Student', 'Score', 'Status', 'Trend'],
+      rows: rows,
     );
   }
 

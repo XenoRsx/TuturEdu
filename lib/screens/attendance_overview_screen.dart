@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/app_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/stat_bar.dart';
@@ -35,12 +36,14 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
-      return const Scaffold(body: Center(child: Text('Please log in again.')));
+      return Scaffold(
+        body: Center(child: Text(context.tr('Please log in again.'))),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Attendance'),
+        title: Text(context.tr('My Attendance')),
         backgroundColor: Colors.blue,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -61,9 +64,9 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
           final allRecords = snapshot.data!.docs;
 
           if (allRecords.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.event_busy,
-              title: 'No attendance records yet.',
+              title: context.tr('No attendance records yet.'),
             );
           }
 
@@ -98,9 +101,20 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                 padding: const EdgeInsets.all(12),
                 child: DropdownButtonFormField<String>(
                   initialValue: _selectedSubject,
-                  decoration: const InputDecoration(labelText: 'Subject'),
+                  decoration: InputDecoration(labelText: context.tr('Subject')),
                   items: ['All Subjects', ...subjects]
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s,
+                          // 'All Subjects' is a sentinel value - only its
+                          // label is translated.
+                          child: Text(
+                            s == 'All Subjects'
+                                ? context.tr('All Subjects')
+                                : s,
+                          ),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) => setState(
                     () => _selectedSubject = value ?? 'All Subjects',
@@ -117,7 +131,7 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                     children: [
                       Text(
                         rate == null
-                            ? 'No data'
+                            ? context.tr('No data')
                             : '${rate.toStringAsFixed(0)}%',
                         style: TextStyle(
                           fontSize: 32,
@@ -126,7 +140,7 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                         ),
                       ),
                       Text(
-                        'Attendance Rate',
+                        context.tr('Attendance Rate'),
                         style: TextStyle(
                           color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
@@ -140,7 +154,10 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                       ],
                       const SizedBox(height: 6),
                       Text(
-                        '$attended / $total classes attended',
+                        context.tr('{a} / {t} classes attended', {
+                          'a': attended,
+                          't': total,
+                        }),
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       if (isLow) ...[
@@ -155,7 +172,10 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Low attendance warning (below $_kLowAttendanceThreshold%)',
+                              context.tr(
+                                'Low attendance warning (below {n}%)',
+                                {'n': _kLowAttendanceThreshold},
+                              ),
                               style: const TextStyle(
                                 color: Colors.red,
                                 fontWeight: FontWeight.w600,
@@ -188,7 +208,9 @@ class _AttendanceOverviewScreenState extends State<AttendanceOverviewScreen> {
                         title: Text(subject),
                         subtitle: Text(date != null ? _formatDate(date) : ''),
                         trailing: Text(
-                          present ? 'Present' : 'Absent',
+                          present
+                              ? context.tr('Present')
+                              : context.tr('Absent'),
                           style: TextStyle(
                             color: present ? Colors.green : Colors.red,
                             fontWeight: FontWeight.w600,

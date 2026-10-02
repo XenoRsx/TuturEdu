@@ -12,36 +12,45 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../main.dart' show kBrandBlue;
 
-String _friendlyAuthMessage(Object error) {
+String _friendlyAuthMessage(BuildContext context, Object error) {
   if (error is FirebaseAuthException) {
     switch (error.code) {
       case 'user-not-found':
       case 'wrong-password':
       case 'invalid-credential':
-        return 'Incorrect email or password. Please try again.';
+        return context.tr('Incorrect email or password. Please try again.');
       case 'invalid-email':
-        return 'That doesn\'t look like a valid email address.';
+        return context.tr('That doesn\'t look like a valid email address.');
       case 'user-disabled':
-        return 'This account has been disabled. Contact an Admin for help.';
+        return context.tr(
+          'This account has been disabled. Contact an Admin for help.',
+        );
       case 'too-many-requests':
-        return 'Too many attempts. Please wait a moment and try again.';
+        return context.tr(
+          'Too many attempts. Please wait a moment and try again.',
+        );
       case 'email-already-in-use':
-        return 'This email is already registered. Please log in instead.';
+        return context.tr(
+          'This email is already registered. Please log in instead.',
+        );
       case 'weak-password':
-        return 'Password is too weak. Use at least 6 characters.';
+        return context.tr('Password is too weak. Use at least 6 characters.');
       case 'network-request-failed':
-        return 'Network error. Check your connection and try again.';
+        return context.tr(
+          'Network error. Check your connection and try again.',
+        );
       default:
-        return 'Something went wrong. Please try again.';
+        return context.tr('Something went wrong. Please try again.');
     }
   }
   // Custom messages thrown elsewhere in this codebase (e.g. "User data not
   // found in the database...") are already written to be human-readable -
   // show them as-is rather than hiding them behind a generic fallback.
   if (error is String) return error;
-  return 'Something went wrong. Please try again.';
+  return context.tr('Something went wrong. Please try again.');
 }
 
 Future<void> showAuthErrorDialog(
@@ -59,12 +68,12 @@ Future<void> showAuthErrorDialog(
           Expanded(child: Text(title)),
         ],
       ),
-      content: Text(_friendlyAuthMessage(error)),
+      content: Text(_friendlyAuthMessage(context, error)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
           style: TextButton.styleFrom(foregroundColor: kBrandBlue),
-          child: const Text('OK'),
+          child: Text(context.tr('OK')),
         ),
       ],
     ),

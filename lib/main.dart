@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'l10n/app_strings.dart';
 import 'screens/auth_gate.dart';
 import 'utils/notification_sounds.dart';
+import 'utils/presence.dart';
 import 'utils/theme_preference.dart';
 
 void main() async {
@@ -152,9 +155,12 @@ class _MyAppState extends State<MyApp> {
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
       _themeModeSub?.cancel();
       if (user == null) {
+        Presence.stop();
         themeModeNotifier.value = ThemeMode.system;
+        languageNotifier.value = null;
         return;
       }
+      Presence.start(user.uid);
       _themeModeSub = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -162,6 +168,11 @@ class _MyAppState extends State<MyApp> {
           .listen((doc) {
             themeModeNotifier.value = themeModeFromString(
               doc.data()?['themeMode'] as String?,
+            );
+            // Same account-level pattern for language (BLUEPRINT.md 5.26).
+            // Unset = keep following the device language.
+            languageNotifier.value = localeFromLanguage(
+              doc.data()?['language'] as String?,
             );
           });
     });
@@ -171,21 +182,35 @@ class _MyAppState extends State<MyApp> {
   void dispose() {
     _authSub?.cancel();
     _themeModeSub?.cancel();
+    Presence.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeModeNotifier,
-      builder: (context, mode, _) => MaterialApp(
-        scaffoldMessengerKey: rootScaffoldMessengerKey,
-        title: 'TuturEdu',
-        theme: _buildTheme(Brightness.light),
-        darkTheme: _buildTheme(Brightness.dark),
-        themeMode: mode,
-        home: const AuthGate(),
-        debugShowCheckedModeBanner: false,
+    return ValueListenableBuilder<Locale?>(
+      valueListenable: languageNotifier,
+      builder: (context, locale, _) => ValueListenableBuilder<ThemeMode>(
+        valueListenable: themeModeNotifier,
+        builder: (context, mode, _) => MaterialApp(
+          scaffoldMessengerKey: rootScaffoldMessengerKey,
+          title: 'TuturEdu',
+          theme: _buildTheme(Brightness.light),
+          darkTheme: _buildTheme(Brightness.dark),
+          themeMode: mode,
+          // null = device language (signed out, or never chosen in
+          // Settings), resolved against supportedLocales - anything other
+          // than Malay falls back to English.
+          locale: locale,
+          supportedLocales: kSupportedLocales,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AuthGate(),
+          debugShowCheckedModeBanner: false,
+        ),
       ),
     );
   }

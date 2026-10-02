@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_strings.dart';
 import '../utils/office_hours.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -56,36 +57,42 @@ class _SocialLink {
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
-  static const List<_Offering> _offerings = [
+  // A method (not a static const list) so each string goes through
+  // context.tr() - see lib/l10n/app_strings.dart.
+  List<_Offering> _offerings(BuildContext context) => [
     _Offering(
       icon: Icons.groups_outlined,
-      title: 'Small, focused classes',
-      description:
-          'Class sizes kept manageable so every student gets real attention, '
-          'not just a seat in a crowd.',
+      title: context.tr('Small, focused classes'),
+      description: context.tr(
+        'Class sizes kept manageable so every student gets real attention, '
+        'not just a seat in a crowd.',
+      ),
     ),
     _Offering(
       icon: Icons.menu_book_outlined,
-      title: 'Subjects across levels',
-      description:
-          'Core and elective subjects covering primary through secondary '
-          'levels, taught by tutors who know the syllabus inside out.',
+      title: context.tr('Subjects across levels'),
+      description: context.tr(
+        'Core and elective subjects covering primary through secondary '
+        'levels, taught by tutors who know the syllabus inside out.',
+      ),
     ),
     _Offering(
       icon: Icons.trending_up_outlined,
-      title: 'Progress that\'s tracked, not guessed',
-      description:
-          'Attendance, grades, and performance trends are recorded every '
-          'term, so both the centre and parents can see how a student is '
-          'actually doing.',
+      title: context.tr('Progress that\'s tracked, not guessed'),
+      description: context.tr(
+        'Attendance, grades, and performance trends are recorded every '
+        'term, so both the centre and parents can see how a student is '
+        'actually doing.',
+      ),
     ),
     _Offering(
       icon: Icons.forum_outlined,
-      title: 'One conversation space',
-      description:
-          'TuturEdu keeps students, parents, and tutors talking in one '
-          'place, inside clear working hours - not scattered across '
-          'personal phone numbers.',
+      title: context.tr('One conversation space'),
+      description: context.tr(
+        'TuturEdu keeps students, parents, and tutors talking in one '
+        'place, inside clear working hours - not scattered across '
+        'personal phone numbers.',
+      ),
     ),
   ];
 
@@ -112,14 +119,15 @@ class WelcomeScreen extends StatelessWidget {
     if (uri == null ||
         !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not open the link.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('Could not open the link.'))),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final offerings = _offerings(context);
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -149,7 +157,7 @@ class WelcomeScreen extends StatelessWidget {
                       );
                     },
                     child: Text(
-                      'Log In',
+                      context.tr('Log In'),
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
@@ -167,7 +175,7 @@ class WelcomeScreen extends StatelessWidget {
                       );
                     },
                     child: Text(
-                      'Sign Up',
+                      context.tr('Sign Up'),
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
@@ -205,7 +213,9 @@ class WelcomeScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 28),
                                 Text(
-                                  'The chat platform built for\nPusat Tuisyen Arena Matriks',
+                                  context.tr(
+                                    'The chat platform built for\nPusat Tuisyen Arena Matriks',
+                                  ),
                                   style: TextStyle(
                                     fontSize: 30,
                                     height: 1.15,
@@ -216,10 +226,12 @@ class WelcomeScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 14),
                                 Text(
-                                  'One organised space to connect students, '
-                                  'teachers, and parents — inside clear '
-                                  'working hours, with nothing lost in a '
-                                  'group chat.',
+                                  context.tr(
+                                    'One organised space to connect students, '
+                                    'teachers, and parents — inside clear '
+                                    'working hours, with nothing lost in a '
+                                    'group chat.',
+                                  ),
                                   style: TextStyle(
                                     fontSize: 15,
                                     height: 1.5,
@@ -251,8 +263,8 @@ class WelcomeScreen extends StatelessWidget {
                                                   BorderRadius.circular(10),
                                             ),
                                           ),
-                                          child: const Text(
-                                            'Sign Up',
+                                          child: Text(
+                                            context.tr('Sign Up'),
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
@@ -289,8 +301,8 @@ class WelcomeScreen extends StatelessWidget {
                                                   BorderRadius.circular(10),
                                             ),
                                           ),
-                                          child: const Text(
-                                            'Log In',
+                                          child: Text(
+                                            context.tr('Log In'),
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.w700,
@@ -341,8 +353,8 @@ class WelcomeScreen extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    const Text(
-                                      'ABOUT THE CENTRE',
+                                    Text(
+                                      context.tr('ABOUT THE CENTRE'),
                                       style: TextStyle(
                                         fontSize: 11.5,
                                         fontWeight: FontWeight.w700,
@@ -363,19 +375,21 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const Text(
-                                  'Built around one idea: learning works '
-                                  'best when students, tutors, and parents '
-                                  'are genuinely connected. Every class runs '
-                                  'with that in mind — structured lessons, '
-                                  'tutors who follow up on progress, and a '
-                                  'clear line of communication home.\n\n'
-                                  'TuturEdu is the centre\'s official chat '
-                                  'platform, carrying that connection '
-                                  'online: one safe space for students, '
-                                  'parents, and tutors to talk, in line '
-                                  'with the centre\'s working hours.',
-                                  style: TextStyle(
+                                Text(
+                                  context.tr(
+                                    'Built around one idea: learning works '
+                                    'best when students, tutors, and parents '
+                                    'are genuinely connected. Every class runs '
+                                    'with that in mind — structured lessons, '
+                                    'tutors who follow up on progress, and a '
+                                    'clear line of communication home.\n\n'
+                                    'TuturEdu is the centre\'s official chat '
+                                    'platform, carrying that connection '
+                                    'online: one safe space for students, '
+                                    'parents, and tutors to talk, in line '
+                                    'with the centre\'s working hours.',
+                                  ),
+                                  style: const TextStyle(
                                     fontSize: 14.5,
                                     height: 1.65,
                                     color: Colors.white70,
@@ -406,8 +420,8 @@ class WelcomeScreen extends StatelessWidget {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            const Text(
-                                              'OPERATING HOURS',
+                                            Text(
+                                              context.tr('OPERATING HOURS'),
                                               style: TextStyle(
                                                 fontSize: 10.5,
                                                 fontWeight: FontWeight.w700,
@@ -417,7 +431,9 @@ class WelcomeScreen extends StatelessWidget {
                                             ),
                                             const SizedBox(height: 3),
                                             Text(
-                                              OfficeHours.officeHourText(),
+                                              context.trDays(
+                                                OfficeHours.officeHourText(),
+                                              ),
                                               style: const TextStyle(
                                                 fontSize: 13.5,
                                                 fontWeight: FontWeight.w600,
@@ -439,7 +455,7 @@ class WelcomeScreen extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(28, 40, 28, 0),
                             child: Text(
-                              'WHAT WE OFFER',
+                              context.tr('WHAT WE OFFER'),
                               style: TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
@@ -454,8 +470,9 @@ class WelcomeScreen extends StatelessWidget {
                             padding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
                             child: Column(
                               children: [
-                                for (var i = 0; i < _offerings.length; i++) ...[
-                                  if (i > 0)
+                                for (var i = 0; i < offerings.length; i++) ...[
+                                  if (offerings[i].title !=
+                                      _offerings(context).first.title)
                                     Divider(
                                       height: 1,
                                       color: _borderColor(context),
@@ -469,7 +486,7 @@ class WelcomeScreen extends StatelessWidget {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Icon(
-                                          _offerings[i].icon,
+                                          offerings[i].icon,
                                           color: _inkDark(context),
                                           size: 22,
                                         ),
@@ -480,7 +497,7 @@ class WelcomeScreen extends StatelessWidget {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                _offerings[i].title,
+                                                offerings[i].title,
                                                 style: TextStyle(
                                                   fontSize: 15,
                                                   fontWeight: FontWeight.w700,
@@ -489,7 +506,7 @@ class WelcomeScreen extends StatelessWidget {
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                _offerings[i].description,
+                                                offerings[i].description,
                                                 style: TextStyle(
                                                   fontSize: 13.5,
                                                   height: 1.5,

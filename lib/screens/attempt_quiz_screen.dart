@@ -12,6 +12,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../utils/quiz_theme.dart';
 
 class AttemptQuizScreen extends StatefulWidget {
@@ -38,6 +39,10 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
 
   bool _reviewMode = false;
   Map<String, dynamic>? _existingAnswers;
+  // Correct answers for review mode - only ever known AFTER submitting,
+  // returned/stored by the submitQuizAttempt Cloud Function (BLUEPRINT.md
+  // 9.8). Students can't read the quiz's answerKeys directly.
+  Map<String, int> _correctAnswers = {};
   int _finalScore = 0;
   int _totalPoints = 0;
   bool _submitting = false;
@@ -90,12 +95,17 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
         );
         _maxAttempts = quizData?['maxAttempts'] as int? ?? 1;
         _dueDate = (quizData?['dueDate'] as Timestamp?)?.toDate();
-        _attemptsUsed = attemptData?['attemptsUsed'] as int? ?? 0;
+        // Attempts saved before attemptsUsed existed only ever had one -
+        // matches submitQuizAttempt's server-side count.
+        _attemptsUsed =
+            attemptData?['attemptsUsed'] as int? ??
+            (attemptData != null ? 1 : 0);
         if (attemptData != null && attemptData['status'] == 'completed') {
           _reviewMode = true;
           _existingAnswers = Map<String, dynamic>.from(
             attemptData['answers'] ?? {},
           );
+          _correctAnswers = _parseCorrectAnswers(attemptData['correctAnswers']);
           _finalScore = attemptData['score'] as int? ?? 0;
         }
         _loading = false;
@@ -148,35 +158,43 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
 
     setState(() => _submitting = true);
 
-    var score = 0;
-    for (final q in _questions) {
-      final data = q.data() as Map<String, dynamic>;
-      if (_selectedAnswers[q.id] == data['correctIndex']) {
-        score += (data['points'] as int? ?? 100);
-      }
-    }
+    // Scored server-side - firestore.rules no longer lets the client write
+    // quizAttempts at all, so the score can't be faked. The function also
+    // re-checks due date + attempts left, so the client-side checks here
+    // are UX only.
+    try {
+      final result =
+          await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+              .httpsCallable('submitQuizAttempt')
+              .call({'quizId': widget.quizId, 'answers': _selectedAnswers});
+      final data = Map<String, dynamic>.from(result.data as Map);
 
-    await _attemptRef.set({
-      'quizId': widget.quizId,
-      'studentUid': _currentUser!.uid,
-      'status': 'completed',
-      'startedAt': FieldValue.serverTimestamp(),
-      'completedAt': FieldValue.serverTimestamp(),
-      'score': score,
-      'totalPoints': _totalPoints,
-      'answers': _selectedAnswers,
-      'attemptsUsed': _attemptsUsed + 1,
-    });
-
-    if (mounted) {
+      if (!mounted) return;
       setState(() {
         _reviewMode = true;
         _existingAnswers = Map<String, dynamic>.from(_selectedAnswers);
-        _finalScore = score;
-        _attemptsUsed += 1;
-        _submitting = false;
+        _correctAnswers = _parseCorrectAnswers(data['correctAnswers']);
+        _finalScore = data['score'] as int? ?? 0;
+        _totalPoints = data['totalPoints'] as int? ?? _totalPoints;
+        _attemptsUsed = data['attemptsUsed'] as int? ?? _attemptsUsed + 1;
       });
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Could not submit the quiz.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Map<String, int> _parseCorrectAnswers(dynamic raw) {
+    if (raw is! Map) return {};
+    return {
+      for (final entry in raw.entries)
+        if (entry.value is int) entry.key.toString(): entry.value as int,
+    };
   }
 
   // Only reachable when _canRetake is true (attempts remain and the quiz
@@ -400,7 +418,12 @@ class _AttemptQuizScreenState extends State<AttemptQuizScreen> {
     final q = _questions[index];
     final data = q.data() as Map<String, dynamic>;
     final options = List<String>.from(data['options'] ?? []);
-    final correctIndex = data['correctIndex'] as int? ?? 0;
+    // Legacy fallback: attempts submitted before server-side scoring
+    // didn't store correctAnswers - use the question doc's old field if it
+    // hasn't been migrated away yet, otherwise show no highlight rather
+    // than a wrong one.
+    final correctIndex =
+        _correctAnswers[q.id] ?? (data['correctIndex'] as int?);
     final selected = _reviewMode
         ? (_existingAnswers?[q.id] as num?)?.toInt()
         : _selectedAnswers[q.id];

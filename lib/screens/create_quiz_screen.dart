@@ -18,6 +18,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/quiz_answer_keys.dart';
 import '../utils/quiz_theme.dart';
 import '../widgets/app_card.dart';
 
@@ -154,6 +155,11 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
           }
         }
 
+        // Also migrates a legacy quiz whose questions still carry
+        // correctIndex directly - must run BEFORE reading the questions
+        // below, or they'd be read with the field still on them.
+        final answerKeys = await loadAnswerKeysForOwnQuiz(widget.quizId!);
+
         final questionsSnapshot = await FirebaseFirestore.instance
             .collection('quizzes')
             .doc(widget.quizId)
@@ -178,7 +184,7 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
             ) {
               draft.optionControllers[i].text = options[i];
             }
-            draft.correctIndex = data['correctIndex'] ?? 0;
+            draft.correctIndex = answerKeys[doc.id] ?? 0;
             draft.timeLimitSeconds = data['timeLimitSeconds'] ?? 20;
             draft.points = data['points'] ?? 100;
             _questions.add(draft);
@@ -262,12 +268,20 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
 
       if (_isEditing) {
         batch.update(quizRef, quizData);
-        // Always fully replace the questions subcollection rather than
-        // diff/merge individual question docs - simpler, and consistent
-        // with how the create flow already writes questions.
-        final existingQuestions = await quizRef.collection('questions').get();
-        for (final doc in existingQuestions.docs) {
-          batch.delete(doc.reference);
+        // Always fully replace the questions (and their answer keys) rather
+        // than diff/merge individual docs - simpler, and consistent with
+        // how the create flow already writes them.
+        final existing = await Future.wait([
+          quizRef.collection('questions').get(),
+          quizRef
+              .collection('answerKeys')
+              .where('createdBy', isEqualTo: currentUser.uid)
+              .get(),
+        ]);
+        for (final snap in existing) {
+          for (final doc in snap.docs) {
+            batch.delete(doc.reference);
+          }
         }
       } else {
         batch.set(quizRef, {
@@ -276,6 +290,8 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
         });
       }
 
+      // The correct answer goes in answerKeys (same doc ID as its question),
+      // never on the question doc students can read - see BLUEPRINT.md 9.8.
       for (var i = 0; i < _questions.length; i++) {
         final q = _questions[i];
         final questionRef = quizRef.collection('questions').doc();
@@ -283,9 +299,12 @@ class _CreateQuizScreenState extends State<CreateQuizScreen> {
           'order': i,
           'text': q.textController.text.trim(),
           'options': q.optionControllers.map((c) => c.text.trim()).toList(),
-          'correctIndex': q.correctIndex,
           'timeLimitSeconds': q.timeLimitSeconds,
           'points': q.points,
+          'createdBy': currentUser.uid,
+        });
+        batch.set(quizRef.collection('answerKeys').doc(questionRef.id), {
+          'correctIndex': q.correctIndex,
           'createdBy': currentUser.uid,
         });
       }

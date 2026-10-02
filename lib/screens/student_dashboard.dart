@@ -6,6 +6,7 @@
 // chat) or "Join a Quiz" (enter a Live Session join code).
 
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/stat_tile.dart';
 import 'attendance_overview_screen.dart';
@@ -34,16 +35,18 @@ class StudentDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1A2E86C1),
                 child: Icon(Icons.chat, color: Colors.blue),
               ),
-              title: const Text('Find a Teacher'),
-              subtitle: const Text('Search a teacher and start a 1:1 chat'),
+              title: Text(context.tr('Find a Teacher')),
+              subtitle: Text(
+                context.tr('Search a teacher and start a 1:1 chat'),
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const UserSearchScreen(
+                    builder: (_) => UserSearchScreen(
                       targetRole: 'Teacher',
-                      title: 'Find a Teacher',
+                      title: context.tr('Find a Teacher'),
                       accentColor: Colors.blue,
                     ),
                   ),
@@ -55,8 +58,10 @@ class StudentDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1A2E86C1),
                 child: Icon(Icons.quiz, color: Colors.blue),
               ),
-              title: const Text('Join a Quiz'),
-              subtitle: const Text('Enter a 6-digit code from your teacher'),
+              title: Text(context.tr('Join a Quiz')),
+              subtitle: Text(
+                context.tr('Enter a 6-digit code from your teacher'),
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
@@ -70,8 +75,10 @@ class StudentDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1A2E86C1),
                 child: Icon(Icons.fact_check_outlined, color: Colors.blue),
               ),
-              title: const Text('My Attendance'),
-              subtitle: const Text('View your attendance rate and history'),
+              title: Text(context.tr('My Attendance')),
+              subtitle: Text(
+                context.tr('View your attendance rate and history'),
+              ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
@@ -87,8 +94,8 @@ class StudentDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1A2E86C1),
                 child: Icon(Icons.assignment_outlined, color: Colors.blue),
               ),
-              title: const Text('Self-Paced Quizzes'),
-              subtitle: const Text('Attempt a quiz on your own time'),
+              title: Text(context.tr('Self-Paced Quizzes')),
+              subtitle: Text(context.tr('Attempt a quiz on your own time')),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
@@ -114,22 +121,26 @@ class StudentDashboard extends StatelessWidget {
   }) {
     return DashboardHeader(
       stats: [
-        StatTile(value: '$totalUnread', label: 'Unread', color: Colors.blue),
+        StatTile(
+          value: '$totalUnread',
+          label: context.tr('Unread'),
+          color: Colors.blue,
+        ),
         StatTile(
           value: '$totalChats',
-          label: 'Total Chats',
+          label: context.tr('Total Chats'),
           color: Colors.green,
         ),
         StatTile(
           value: '$totalGroups',
-          label: 'Groups',
+          label: context.tr('Groups'),
           color: Colors.deepPurple,
         ),
       ],
       actions: [
         QuickAction(
           icon: Icons.assignment_outlined,
-          label: 'Self-Paced Quizzes',
+          label: context.tr('Self-Paced Quizzes'),
           color: Colors.blue,
           onTap: () => Navigator.push(
             context,
@@ -138,7 +149,7 @@ class StudentDashboard extends StatelessWidget {
         ),
         QuickAction(
           icon: Icons.fact_check_outlined,
-          label: 'My Attendance',
+          label: context.tr('My Attendance'),
           color: Colors.green,
           onTap: () => Navigator.push(
             context,
@@ -147,7 +158,7 @@ class StudentDashboard extends StatelessWidget {
         ),
         QuickAction(
           icon: Icons.quiz_outlined,
-          label: 'Join a Quiz',
+          label: context.tr('Join a Quiz'),
           color: Colors.deepPurple,
           onTap: () => Navigator.push(
             context,
@@ -165,7 +176,7 @@ class StudentDashboard extends StatelessWidget {
       homeHeader: _buildHeader,
       extraActions: [
         IconButton(
-          tooltip: 'Settings',
+          tooltip: context.tr('Settings'),
           icon: const Icon(Icons.settings_outlined),
           onPressed: () => Navigator.push(
             context,

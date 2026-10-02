@@ -14,6 +14,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../utils/role_colors.dart';
 import '../widgets/user_avatar.dart';
 import 'chat_screen.dart';
@@ -66,9 +67,11 @@ class UserProfileScreen extends StatelessWidget {
 
     if (allSubjects.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Subject catalog is empty. Ask an Admin to add subjects first.',
+            context.tr(
+              'Subject catalog is empty. Ask an Admin to add subjects first.',
+            ),
           ),
         ),
       );
@@ -81,7 +84,7 @@ class UserProfileScreen extends StatelessWidget {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
-          title: const Text('Edit Subjects'),
+          title: Text(context.tr('Edit Subjects')),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView(
@@ -107,7 +110,7 @@ class UserProfileScreen extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -117,7 +120,7 @@ class UserProfileScreen extends StatelessWidget {
                     .update({'subjects': selected.toList()});
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
               },
-              child: const Text('Save'),
+              child: Text(context.tr('Save')),
             ),
           ],
         ),
@@ -158,7 +161,7 @@ class UserProfileScreen extends StatelessWidget {
     final isOwnProfile = currentUser?.uid == uid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: Text(context.tr('Profile'))),
       body: FutureBuilder<_ProfileData?>(
         future: _load(currentUser?.uid),
         builder: (context, snapshot) {
@@ -170,7 +173,7 @@ class UserProfileScreen extends StatelessWidget {
           }
           final result = snapshot.data;
           if (result == null) {
-            return const Center(child: Text('User not found.'));
+            return Center(child: Text(context.tr('User not found.')));
           }
 
           final data = result.target;
@@ -202,7 +205,7 @@ class UserProfileScreen extends StatelessWidget {
               Center(
                 child: Chip(
                   label: Text(
-                    role,
+                    context.trRole(role),
                     style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                   backgroundColor: color,
@@ -219,7 +222,7 @@ class UserProfileScreen extends StatelessWidget {
                       _infoRow(
                         context,
                         Icons.email_outlined,
-                        'Email',
+                        context.tr('Email'),
                         email.isNotEmpty ? email : '-',
                       ),
                       if (role == 'Teacher' || role == 'Student') ...[
@@ -227,15 +230,15 @@ class UserProfileScreen extends StatelessWidget {
                         _infoRow(
                           context,
                           Icons.menu_book_outlined,
-                          'Subjects',
+                          context.tr('Subjects'),
                           subjects.isNotEmpty
                               ? subjects.join(', ')
-                              : 'No subjects assigned yet',
+                              : context.tr('No subjects assigned yet'),
                           trailing: canEditSubjects
                               ? TextButton(
                                   onPressed: () =>
                                       _editSubjects(context, subjects),
-                                  child: const Text('Edit'),
+                                  child: Text(context.tr('Edit')),
                                 )
                               : null,
                         ),
@@ -251,7 +254,7 @@ class UserProfileScreen extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () => _messageUser(context, name),
                     icon: const Icon(Icons.chat_bubble_outline),
-                    label: const Text('Message'),
+                    label: Text(context.tr('Message')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: color,
                       foregroundColor: Colors.white,

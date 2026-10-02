@@ -8,6 +8,29 @@ was committed.
 
 ## [Unreleased]
 
+### Added
+
+- **Parents see announcements** — a parent now sees every announcement for
+  any of their linked children's subjects (Settings → Announcements) and
+  gets the same push notification; "Seen by N" counts parents too.
+- **Report Message** — long-press someone else's message → Report, with a
+  reason and optional note. Admins get a push notification and review
+  reports in a new "Flagged Messages" screen (delete the message or
+  dismiss). One report per person per message.
+- **Typing indicator and online status** — "typing..." in the chat header
+  while the other side types (with names in group chats), and Online /
+  Last seen for 1:1 chats.
+- **Search messages in a chat** — search icon in the chat's app bar filters
+  the conversation by message text and attachment names.
+- **PDF export** — Class Performance and an attendance summary per subject
+  (teachers), and the system Reports (Admin).
+- **Bahasa Melayu** — Settings → Language switches the core screens
+  (welcome, login/sign-up, MFA, dashboards, chats, settings, profiles,
+  announcements, attendance, parent screens) between English and Bahasa
+  Melayu. Saved to the account, like Dark Mode. Admin screens and the Quiz
+  module stay English. A new test fails if any translated string is
+  missing its Malay version.
+
 ### Fixed
 
 - **Self-Paced Quiz stuck loading forever on first open** — `quizAttempts`'
@@ -30,8 +53,26 @@ was committed.
   the button did nothing. Fixed with a 5-second timeout that falls back to
   `null`, which every caller already handled gracefully.
 
+### Security
+
+- **Quiz answers and scores moved server-side.** Students could previously
+  read every question's correct answer straight from Firestore, and their
+  own device calculated and wrote their score. Correct answers now live in
+  a teacher-only `answerKeys` subcollection, and scoring is done by two new
+  Cloud Functions (`submitQuizAttempt` for Self-Paced, `submitLiveAnswer`
+  for Live Session) that also enforce due dates, retake limits, time
+  limits and one-answer-per-question. Clients can no longer write scores.
+  Existing quizzes migrate automatically when their teacher opens them or
+  when they're first played.
+
 ### Added
 
+- **Forgot Password** — "Forgot password?" on the login screen sends a
+  Firebase password-reset email. Accounts are now also marked
+  `emailVerified` in Firebase once the email OTP succeeds.
+- **Unit tests** — 28 tests covering office hours, the phishing detector,
+  file validation and role colors (`flutter test`), replacing the default
+  template widget test that could never pass.
 - **Delete Chat** — long-press a chat (1:1 or group) for "Delete for Me"
   (hides it from your list only; it comes back automatically the moment
   anyone sends a new message, same as WhatsApp) or "Delete for Everyone"

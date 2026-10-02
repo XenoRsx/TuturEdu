@@ -26,6 +26,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/quiz_answer_keys.dart';
 import '../utils/quiz_theme.dart';
 import 'quiz_leaderboard_view.dart';
 
@@ -45,6 +46,9 @@ class HostQuizSessionScreen extends StatefulWidget {
 
 class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
   List<QueryDocumentSnapshot>? _questions;
+  // questionId -> correct option index, from the teacher-only answerKeys
+  // subcollection (BLUEPRINT.md 9.8) - question docs no longer carry it.
+  Map<String, int> _answerKeys = {};
   Timer? _ticker;
 
   // Guards _maybeAutoEndQuestion so it only writes 'question_results' ONCE
@@ -74,8 +78,9 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
         .collection('quizSessions')
         .doc(widget.sessionId)
         .get();
-    final quizId = sessionDoc.data()?['quizId'];
+    final quizId = sessionDoc.data()?['quizId'] as String;
 
+    final answerKeys = await loadAnswerKeysForOwnQuiz(quizId);
     final questionsSnap = await FirebaseFirestore.instance
         .collection('quizzes')
         .doc(quizId)
@@ -83,7 +88,12 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
         .orderBy('order')
         .get();
 
-    if (mounted) setState(() => _questions = questionsSnap.docs);
+    if (mounted) {
+      setState(() {
+        _answerKeys = answerKeys;
+        _questions = questionsSnap.docs;
+      });
+    }
   }
 
   DocumentReference get _sessionRef => FirebaseFirestore.instance
@@ -117,8 +127,15 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
     }
   }
 
-  Future<void> _endQuestion() async {
-    await _sessionRef.update({'status': 'question_results'});
+  // Students can't read answerKeys, so this is how they learn the correct
+  // answer for the results screen - only published once the question is
+  // closed, never while it's still open for answers.
+  Future<void> _endQuestion(int currentIndex) async {
+    final questionId = _questions![currentIndex].id;
+    await _sessionRef.update({
+      'status': 'question_results',
+      'revealedAnswers.$questionId': _answerKeys[questionId],
+    });
   }
 
   void _maybeAutoEndQuestion(
@@ -132,7 +149,7 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
         participantCount > 0 && answeredCount >= participantCount;
     if (remaining <= 0 || allAnswered) {
       _autoEndedForIndex = currentIndex;
-      _endQuestion();
+      _endQuestion(currentIndex);
     }
   }
 
@@ -438,7 +455,7 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
               mainAxisSpacing: 12,
               childAspectRatio: 2.2,
               children: List.generate(options.length, (i) {
-                final isCorrect = i == question['correctIndex'];
+                final isCorrect = i == _answerKeys[questionId];
                 final color =
                     QuizTheme.optionColors[i % QuizTheme.optionColors.length];
                 return Container(
@@ -502,7 +519,10 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
                 ),
               ),
               TextButton(
-                onPressed: _endQuestion,
+                onPressed: () {
+                  _autoEndedForIndex = currentIndex;
+                  _endQuestion(currentIndex);
+                },
                 child: const Text('End Question Now'),
               ),
             ],
@@ -525,7 +545,7 @@ class _HostQuizSessionScreenState extends State<HostQuizSessionScreen> {
     final question = questions[currentIndex].data() as Map<String, dynamic>;
     final questionId = questions[currentIndex].id;
     final options = List<String>.from(question['options'] ?? []);
-    final correctIndex = question['correctIndex'] as int? ?? 0;
+    final correctIndex = _answerKeys[questionId] ?? 0;
     final points = question['points'] as int? ?? 100;
     final isLastQuestion = currentIndex >= questions.length - 1;
     final correctAnswerText = correctIndex < options.length

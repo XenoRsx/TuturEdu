@@ -43,9 +43,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_strings.dart';
 import '../utils/file_validator.dart';
 import '../utils/office_hours.dart';
 import '../utils/phishing_detector.dart';
+import '../utils/presence.dart';
 import '../widgets/app_card.dart';
 import '../utils/role_colors.dart';
 import '../widgets/empty_state.dart';
@@ -113,6 +115,27 @@ class _ChatScreenState extends State<ChatScreen> {
   List<String> _participants = [];
   Map<String, dynamic> _lastRead = {};
 
+  // ----- Typing indicator + online status (see BLUEPRINT.md 5.23) -----
+  // Each participant writes `chats/{id}.typing.{uid}` (throttled) while
+  // composing. "Fresh" is judged by when THIS device received the ping
+  // (_typingSeenAt), not by the server timestamp itself - so a phone with a
+  // wrong clock on either end can't make "typing..." stick or never show.
+  static const _typingFresh = Duration(seconds: 5);
+  static const _typingThrottle = Duration(seconds: 3);
+  final Map<String, DateTime> _typingSeenAt = {};
+  Map<String, dynamic> _typingRaw = {};
+  DateTime? _lastTypingWrite;
+  Timer? _statusTicker;
+  String? _statusLine;
+  String? _otherUid;
+  DateTime? _otherLastSeen;
+  StreamSubscription<DocumentSnapshot>? _otherUserSub;
+
+  // ----- Search messages (see BLUEPRINT.md 5.24) -----
+  bool _searching = false;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
   // Cache of sender info (uid -> _SenderInfo) for group chats, avoids
   // repeated queries for the same bubble on every StreamBuilder rebuild.
   // Widened from name-only to also carry role, so the sender-name label can
@@ -167,7 +190,16 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _participants = List<String>.from(data['participants'] ?? []);
         _lastRead = Map<String, dynamic>.from(data['lastRead'] ?? {});
+        _updateTyping(Map<String, dynamic>.from(data['typing'] ?? {}));
+        _statusLine = _computeStatusLine();
       });
+      if (!widget.isGroup) {
+        final me = FirebaseAuth.instance.currentUser?.uid;
+        final other =
+            widget.otherUserUid ??
+            _participants.where((uid) => uid != me).firstOrNull;
+        if (other != null) _watchOtherUser(other);
+      }
       if (widget.isGroup) {
         final groupAdmin = data['groupAdmin'] as String?;
         if (groupAdmin != null && groupAdmin != _groupAdminUid) {
@@ -184,6 +216,14 @@ class _ChatScreenState extends State<ChatScreen> {
         .collection('messages')
         .snapshots()
         .listen((_) => _markAsRead());
+
+    // Typing pings expire and "Online" turns into "Last seen" purely with
+    // the passage of time (no new snapshot arrives), so re-check once a
+    // second - setState only when the visible line actually changes.
+    _statusTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final line = _computeStatusLine();
+      if (line != _statusLine && mounted) setState(() => _statusLine = line);
+    });
 
     // Check every minute whether office hour status has changed
     // (e.g. user opened the app at 4:59pm, chat should lock at 5:00pm)
@@ -229,6 +269,115 @@ class _ChatScreenState extends State<ChatScreen> {
           });
           if (_isOfficeHour) _autoSendDueScheduledReplies();
         });
+  }
+
+  // Called inside the chat-doc listener's setState.
+  void _updateTyping(Map<String, dynamic> typing) {
+    final me = FirebaseAuth.instance.currentUser?.uid;
+    final now = DateTime.now();
+    for (final entry in typing.entries) {
+      final value = entry.value;
+      if (entry.key == me || value is! Timestamp) continue;
+      if (_typingRaw[entry.key] == value) continue;
+      // Leftover ping from someone who closed the app mid-typing (dispose
+      // never got to clear it) - coarse 1-minute check, tolerant of skew.
+      if (now.difference(value.toDate()).abs() > const Duration(minutes: 1)) {
+        continue;
+      }
+      _typingSeenAt[entry.key] = now;
+      if (widget.isGroup && !_senderInfoCache.containsKey(entry.key)) {
+        _getSenderInfo(entry.key).then((_) {
+          if (mounted) setState(() => _statusLine = _computeStatusLine());
+        });
+      }
+    }
+    _typingSeenAt.removeWhere((uid, _) => typing[uid] is! Timestamp);
+    _typingRaw = typing;
+  }
+
+  /// AppBar subtitle: who's typing, else (1:1 only) Online / Last seen.
+  String? _computeStatusLine() {
+    final now = DateTime.now();
+    final typingUids = _typingSeenAt.entries
+        .where((e) => now.difference(e.value) < _typingFresh)
+        .map((e) => e.key)
+        .toList();
+    if (typingUids.isNotEmpty) {
+      if (!widget.isGroup) return context.tr('typing...');
+      if (typingUids.length > 1) {
+        return context.tr('{n} people are typing...', {'n': typingUids.length});
+      }
+      final name =
+          _senderInfoCache[typingUids.first]?.name ?? context.tr('Someone');
+      return context.tr('{name} is typing...', {'name': name});
+    }
+    if (widget.isGroup) return null;
+    final presence = context.trDays(
+      Presence.describe(_otherLastSeen)
+          .replaceFirst('Online', context.tr('Online'))
+          .replaceFirst('Last seen', context.tr('Last seen')),
+    );
+    return presence.isEmpty ? null : presence;
+  }
+
+  void _watchOtherUser(String uid) {
+    if (_otherUid == uid) return;
+    _otherUid = uid;
+    _otherUserSub?.cancel();
+    _otherUserSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen((doc) {
+          if (!mounted) return;
+          setState(() {
+            _otherLastSeen = (doc.data()?['lastSeen'] as Timestamp?)?.toDate();
+            _statusLine = _computeStatusLine();
+          });
+        });
+  }
+
+  // Throttled: at most one write per _typingThrottle while typing. Never
+  // touches lastUpdated, so chat-list order and push triggers don't move.
+  void _onComposeChanged(String value) {
+    if (value.trim().isEmpty) {
+      _clearTyping();
+      return;
+    }
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final now = DateTime.now();
+    final last = _lastTypingWrite;
+    if (last != null && now.difference(last) < _typingThrottle) return;
+    _lastTypingWrite = now;
+    FirebaseFirestore.instance.collection('chats').doc(widget.chatId).update({
+      'typing.$uid': FieldValue.serverTimestamp(),
+    }).ignore();
+  }
+
+  void _clearTyping() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || _lastTypingWrite == null) return;
+    _lastTypingWrite = null;
+    FirebaseFirestore.instance.collection('chats').doc(widget.chatId).update({
+      'typing.$uid': FieldValue.delete(),
+    }).ignore();
+  }
+
+  void _closeSearch() {
+    setState(() {
+      _searching = false;
+      _searchQuery = '';
+      _searchController.clear();
+    });
+  }
+
+  bool _matchesSearch(Map<String, dynamic> data) {
+    if (data['deleted'] == true) return false;
+    final query = _searchQuery.toLowerCase();
+    final text = (data['text'] as String? ?? '').toLowerCase();
+    final file = (data['attachmentName'] as String? ?? '').toLowerCase();
+    return text.contains(query) || file.contains(query);
   }
 
   Future<void> _loadCurrentUserRole() async {
@@ -285,6 +434,10 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _officeHourTimer?.cancel();
+    _statusTicker?.cancel();
+    _otherUserSub?.cancel();
+    _clearTyping();
+    _searchController.dispose();
     _chatDocSub?.cancel();
     _messagesSub?.cancel();
     _teacherDutySub?.cancel();
@@ -313,7 +466,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
-    if (!isQuickReply) _messageController.clear();
+    if (!isQuickReply) {
+      _messageController.clear();
+      _clearTyping();
+    }
 
     final chatRef = FirebaseFirestore.instance
         .collection('chats')
@@ -360,7 +516,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final picked = result.files.single;
     final bytes = picked.bytes;
     if (bytes == null) {
-      _showAttachmentError('Could not read the selected file.');
+      if (!mounted) return;
+      _showAttachmentError(context.tr('Could not read the selected file.'));
       return;
     }
 
@@ -425,8 +582,10 @@ class _ChatScreenState extends State<ChatScreen> {
             onTimeout: () {
               uploadTask.cancel();
               throw TimeoutException(
-                'Upload timed out. Firebase Storage may not be enabled '
-                'for this project yet - check the Firebase Console.',
+                context.tr(
+                  'Upload timed out. Firebase Storage may not be enabled '
+                  'for this project yet - check the Firebase Console.',
+                ),
               );
             },
           );
@@ -490,9 +649,10 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       await chatRef.set(chatUpdates, SetOptions(merge: true));
     } catch (e) {
+      if (!mounted) return;
       final message = e is TimeoutException
-          ? e.message ?? 'Upload timed out.'
-          : 'Upload failed: ${e.toString()}';
+          ? e.message ?? context.tr('Upload timed out.')
+          : context.tr('Upload failed: {e}', {'e': e});
       _showAttachmentError(message);
     } finally {
       await progressSub?.cancel();
@@ -510,11 +670,11 @@ class _ChatScreenState extends State<ChatScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Attachment Error'),
+            const Icon(Icons.error_outline, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Text(context.tr('Attachment Error')),
           ],
         ),
         content: Text(message),
@@ -581,7 +741,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _openAttachment(String url) async {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showAttachmentError('Could not open the attachment.');
+      if (!mounted) return;
+      _showAttachmentError(context.tr('Could not open the attachment.'));
     }
   }
 
@@ -663,7 +824,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final uri = Uri.tryParse(normalizeUrl(rawUrl));
     if (uri == null ||
         !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showAttachmentError('Could not open the link.');
+      if (!mounted) return;
+      _showAttachmentError(context.tr('Could not open the link.'));
     }
   }
 
@@ -671,27 +833,30 @@ class _ChatScreenState extends State<ChatScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Suspicious link'),
+            const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Text(context.tr('Suspicious link')),
           ],
         ),
         content: Text(
-          'This link looks like it could be a phishing attempt:\n\n$rawUrl\n\n'
-          'Only open it if you trust where it came from.',
+          context.tr(
+            'This link looks like it could be a phishing attempt:\n\n{url}\n\n'
+            'Only open it if you trust where it came from.',
+            {'url': rawUrl},
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Open Anyway',
+            child: Text(
+              context.tr('Open Anyway'),
               style: TextStyle(color: Colors.white),
             ),
           ),
@@ -721,20 +886,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Message'),
-        content: const Text(
-          'Delete this message for everyone in the chat? This cannot be '
-          'undone.',
+        title: Text(context.tr('Delete Message')),
+        content: Text(
+          context.tr(
+            'Delete this message for everyone in the chat? This cannot be '
+            'undone.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            child: Text(
+              context.tr('Delete'),
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -750,6 +920,196 @@ class _ChatScreenState extends State<ChatScreen> {
         .update({'deleted': true, 'deletedAt': FieldValue.serverTimestamp()});
   }
 
+  // ----- Report Message (BLUEPRINT.md 5.22) -----
+  // Anyone can report someone ELSE's message (not their own, not one that's
+  // already deleted). Reviewed by Admin in flagged_messages_screen.dart.
+  bool _canReportMessage(Map<String, dynamic> data, bool isMe) =>
+      !isMe && data['deleted'] != true;
+
+  void _showMessageActions(
+    String messageId,
+    Map<String, dynamic> data,
+    bool isMe,
+  ) {
+    final canDelete = _canDeleteMessage(data, isMe);
+    final canReport = _canReportMessage(data, isMe);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            if (canDelete)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: Text(
+                  context.tr('Delete Message'),
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _confirmDeleteMessage(messageId);
+                },
+              ),
+            if (canReport)
+              ListTile(
+                leading: const Icon(Icons.flag_outlined, color: Colors.orange),
+                title: Text(context.tr('Report Message')),
+                subtitle: Text(
+                  context.tr('Send this message to an Admin to review'),
+                ),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _reportMessage(messageId, data);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _reportReasonLabel(String reason) {
+    switch (reason) {
+      case 'Bullying or harassment':
+        return context.tr('Bullying or harassment');
+      case 'Inappropriate content':
+        return context.tr('Inappropriate content');
+      case 'Spam or scam':
+        return context.tr('Spam or scam');
+      default:
+        return context.tr('Other');
+    }
+  }
+
+  static const _reportReasons = [
+    'Bullying or harassment',
+    'Inappropriate content',
+    'Spam or scam',
+    'Other',
+  ];
+
+  Future<void> _reportMessage(
+    String messageId,
+    Map<String, dynamic> data,
+  ) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    var reason = _reportReasons.first;
+    final noteController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(context.tr('Report Message')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.tr('Why are you reporting this message?')),
+                RadioGroup<String>(
+                  groupValue: reason,
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => reason = value);
+                  },
+                  child: Column(
+                    children: _reportReasons
+                        .map(
+                          (r) => RadioListTile<String>(
+                            value: r,
+                            // Stored in English (Admin reads it); shown
+                            // translated.
+                            title: Text(_reportReasonLabel(r)),
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                TextField(
+                  controller: noteController,
+                  maxLines: 3,
+                  maxLength: 300,
+                  decoration: InputDecoration(
+                    labelText: context.tr('More details (optional)'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.tr('Cancel')),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(
+                context.tr('Report'),
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final note = noteController.text.trim();
+    noteController.dispose();
+    if (confirmed != true) return;
+
+    try {
+      // Deterministic ID - one report per person per message. Reporting the
+      // same message twice hits the existing doc, which rules treat as an
+      // update (Admin-only) and deny.
+      await FirebaseFirestore.instance
+          .collection('reports')
+          .doc('${messageId}_${currentUser.uid}')
+          .set({
+            'chatId': widget.chatId,
+            'messageId': messageId,
+            // Snapshot - Admin can't read `messages` directly (rules are
+            // participants-only), so the report has to carry the content.
+            'messageText': data['text'] ?? '',
+            'attachmentName': data['attachmentName'],
+            'reportedUid': data['senderId'],
+            'reportedBy': currentUser.uid,
+            'reason': reason,
+            'note': note,
+            'status': 'open',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+      if (!mounted) return;
+      _showReportResult(
+        context.tr('Thanks - an Admin will review this message.'),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _showReportResult(
+        e.code == 'permission-denied'
+            ? context.tr('You\'ve already reported this message.')
+            : context.tr('Could not send report: {e}', {'e': e.message}),
+      );
+    }
+  }
+
+  void _showReportResult(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   // ----- Overtime Mode: "Reply Now (Overtime Mode)" -----
   void _activateOvertimeReplyNow() {
     setState(() => _overtimeActive = true);
@@ -763,14 +1123,21 @@ class _ChatScreenState extends State<ChatScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(_isTeacher ? 'Schedule Reply' : 'Schedule Message'),
+        title: Text(
+          _isTeacher
+              ? context.tr('Schedule Reply')
+              : context.tr('Schedule Message'),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'This message will be sent automatically once office hours '
-              'reopen (${OfficeHours.nextOpenText()}).',
+              context.tr(
+                'This message will be sent automatically once office hours '
+                'reopen ({when}).',
+                {'when': context.trDays(OfficeHours.nextOpenText())},
+              ),
               style: TextStyle(
                 fontSize: 13,
                 color: Theme.of(context).textTheme.bodySmall?.color,
@@ -781,8 +1148,8 @@ class _ChatScreenState extends State<ChatScreen> {
               controller: controller,
               autofocus: true,
               maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Type the message to schedule...',
+              decoration: InputDecoration(
+                hintText: context.tr('Type the message to schedule...'),
               ),
             ),
           ],
@@ -790,11 +1157,11 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Schedule'),
+            child: Text(context.tr('Schedule')),
           ),
         ],
       ),
@@ -825,7 +1192,11 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Reply scheduled for ${OfficeHours.nextOpenText()}.'),
+          content: Text(
+            context.tr('Reply scheduled for {when}.', {
+              'when': context.trDays(OfficeHours.nextOpenText()),
+            }),
+          ),
         ),
       );
     }
@@ -1034,31 +1405,87 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: InkWell(
-          onTap: () => _openDetails(context),
-          child: Row(
-            children: [
-              if (widget.isGroup) ...[
-                const Icon(Icons.groups, size: 20),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(
-                  widget.otherUserName,
-                  overflow: TextOverflow.ellipsis,
+        leading: _searching
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: context.tr('Close search'),
+                onPressed: _closeSearch,
+              )
+            : null,
+        title: _searching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                cursorColor: Colors.white,
+                decoration: InputDecoration(
+                  hintText: context.tr('Search messages...'),
+                  hintStyle: TextStyle(color: Colors.white70),
+                  border: InputBorder.none,
+                ),
+                onChanged: (value) =>
+                    setState(() => _searchQuery = value.trim()),
+              )
+            : InkWell(
+                onTap: () => _openDetails(context),
+                child: Row(
+                  children: [
+                    if (widget.isGroup) ...[
+                      const Icon(Icons.groups, size: 20),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.otherUserName,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (_statusLine != null)
+                            Text(
+                              _statusLine!,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.white70,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
         backgroundColor: Colors.blue,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: widget.isGroup ? 'Group info' : 'View profile',
-            onPressed: () => _openDetails(context),
-          ),
-        ],
+        actions: _searching
+            ? [
+                if (_searchQuery.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: context.tr('Clear'),
+                    onPressed: () => setState(() {
+                      _searchQuery = '';
+                      _searchController.clear();
+                    }),
+                  ),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  tooltip: context.tr('Search messages'),
+                  onPressed: () => setState(() => _searching = true),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: widget.isGroup
+                      ? context.tr('Group info')
+                      : context.tr('View profile'),
+                  onPressed: () => _openDetails(context),
+                ),
+              ],
       ),
       body: Column(
         children: [
@@ -1080,13 +1507,37 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final messages = snapshot.data!.docs;
+                final allMessages = snapshot.data!.docs;
 
-                if (messages.isEmpty) {
-                  return const EmptyState(
+                if (allMessages.isEmpty) {
+                  return EmptyState(
                     icon: Icons.chat_bubble_outline,
-                    title: 'No messages yet',
-                    subtitle: 'Start the conversation!',
+                    title: context.tr('No messages yet'),
+                    subtitle: context.tr('Start the conversation!'),
+                  );
+                }
+
+                // Client-side search - Firestore has no full-text search,
+                // and this stream already holds the whole conversation.
+                final isFiltering = _searching && _searchQuery.isNotEmpty;
+                final messages = isFiltering
+                    ? allMessages
+                          .where(
+                            (doc) => _matchesSearch(
+                              doc.data() as Map<String, dynamic>,
+                            ),
+                          )
+                          .toList()
+                    : allMessages;
+
+                if (isFiltering && messages.isEmpty) {
+                  return EmptyState(
+                    icon: Icons.search_off,
+                    title: context.tr('No matching messages'),
+                    subtitle: context.tr(
+                      'Nothing in this chat matches "{q}".',
+                      {'q': _searchQuery},
+                    ),
                   );
                 }
 
@@ -1114,8 +1565,11 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
                       child: GestureDetector(
-                        onLongPress: _canDeleteMessage(data, isMe)
-                            ? () => _confirmDeleteMessage(messageDoc.id)
+                        onLongPress:
+                            _canDeleteMessage(data, isMe) ||
+                                _canReportMessage(data, isMe)
+                            ? () =>
+                                  _showMessageActions(messageDoc.id, data, isMe)
                             : null,
                         child: MessageBubble(
                           isMe: isMe,
@@ -1160,8 +1614,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                       const SizedBox(width: 4),
                                       Text(
                                         isOvertimeReply
-                                            ? 'Overtime'
-                                            : 'Scheduled',
+                                            ? context.tr('Overtime')
+                                            : context.tr('Scheduled'),
                                         style: TextStyle(
                                           fontSize: 10.5,
                                           fontWeight: FontWeight.w600,
@@ -1175,7 +1629,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                               if (isDeleted)
                                 Text(
-                                  'This message was deleted',
+                                  context.tr('This message was deleted'),
                                   style: TextStyle(
                                     fontStyle: FontStyle.italic,
                                     color: isMe
@@ -1260,17 +1714,38 @@ class _ChatScreenState extends State<ChatScreen> {
                 Expanded(
                   child: Text(
                     _overtimeActive
-                        ? 'Overtime Mode active — your message will be marked as an after-hours reply.'
+                        ? context.tr(
+                            'Overtime Mode active — your message will be '
+                            'marked as an after-hours reply.',
+                          )
                         : _isTeacherOnLeave
-                        ? 'This teacher is on leave until '
-                              '${_teacherLeaveEnd!.day.toString().padLeft(2, '0')}/'
-                              '${_teacherLeaveEnd!.month.toString().padLeft(2, '0')}/'
-                              '${_teacherLeaveEnd!.year}. Chat will reopen after that.'
+                        ? context.tr(
+                            'This teacher is on leave until {date}. Chat will '
+                            'reopen after that.',
+                            {
+                              'date':
+                                  '${_teacherLeaveEnd!.day.toString().padLeft(2, '0')}/'
+                                  '${_teacherLeaveEnd!.month.toString().padLeft(2, '0')}/'
+                                  '${_teacherLeaveEnd!.year}',
+                            },
+                          )
                         : _teacherOffDuty
-                        ? 'This teacher is currently Off-Duty. Chat will reopen once '
-                              'they go back On-Duty.'
-                        : 'Chat is closed outside office hours (${OfficeHours.officeHourText()}). '
-                              'Reopens: ${OfficeHours.nextOpenText()}.',
+                        ? context.tr(
+                            'This teacher is currently Off-Duty. Chat will '
+                            'reopen once they go back On-Duty.',
+                          )
+                        : context.tr(
+                            'Chat is closed outside office hours ({hours}). '
+                            'Reopens: {when}.',
+                            {
+                              'hours': context.trDays(
+                                OfficeHours.officeHourText(),
+                              ),
+                              'when': context.trDays(
+                                OfficeHours.nextOpenText(),
+                              ),
+                            },
+                          ),
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: Colors.black87,
@@ -1288,8 +1763,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _activateOvertimeReplyNow,
                         icon: const Icon(Icons.bolt, size: 16),
-                        label: const Text(
-                          'Reply Now (Overtime)',
+                        label: Text(
+                          context.tr('Reply Now (Overtime)'),
                           style: TextStyle(fontSize: 12.5),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -1303,8 +1778,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _openScheduleReplyDialog,
                         icon: const Icon(Icons.schedule_send, size: 16),
-                        label: const Text(
-                          'Schedule Reply',
+                        label: Text(
+                          context.tr('Schedule Reply'),
                           style: TextStyle(fontSize: 12.5),
                         ),
                         style: OutlinedButton.styleFrom(
@@ -1321,8 +1796,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: OutlinedButton.icon(
                     onPressed: _openScheduleReplyDialog,
                     icon: const Icon(Icons.schedule_send, size: 16),
-                    label: const Text(
-                      'Schedule Message',
+                    label: Text(
+                      context.tr('Schedule Message'),
                       style: TextStyle(fontSize: 12.5),
                     ),
                     style: OutlinedButton.styleFrom(
@@ -1387,7 +1862,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Scheduled $timeText: "$text"',
+                          context.tr('Scheduled {time}: "{text}"', {
+                            'time': timeText,
+                            'text': text,
+                          }),
                           style: const TextStyle(fontSize: 12),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1412,13 +1890,15 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  static const List<String> _quickReplies = [
-    'OK',
-    'Yes',
-    'No',
-    'Thank you',
-    'Noted',
-    'Please wait',
+  // Sent in the sender's own app language - a chip tapped in Malay sends
+  // the Malay text.
+  List<String> _quickReplies(BuildContext context) => [
+    context.tr('OK'),
+    context.tr('Yes'),
+    context.tr('No'),
+    context.tr('Thank you'),
+    context.tr('Noted'),
+    context.tr('Please wait'),
   ];
 
   /// Row of quick-reply chips above the input bar - tapping one sends it
@@ -1432,10 +1912,10 @@ class _ChatScreenState extends State<ChatScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        itemCount: _quickReplies.length,
+        itemCount: _quickReplies(context).length,
         separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
-          final reply = _quickReplies[index];
+          final reply = _quickReplies(context)[index];
           final chipColor = Theme.of(context).colorScheme.primary;
           return ActionChip(
             label: Text(
@@ -1474,8 +1954,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   )
                 : IconButton(
                     icon: const Icon(Icons.attach_file),
-                    tooltip:
-                        'Send a file (PDF, Word, PowerPoint, Excel, image)',
+                    tooltip: context.tr(
+                      'Send a file (PDF, Word, PowerPoint, Excel, image)',
+                    ),
                     color: canAttach ? Colors.blue : Colors.grey,
                     onPressed: canAttach ? _pickAndSendAttachment : null,
                   ),
@@ -1486,9 +1967,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 decoration: InputDecoration(
                   hintText: canType
                       ? (_overtimeActive
-                            ? 'Type a message (Overtime Mode)...'
-                            : 'Type a message...')
-                      : 'Chat is currently locked',
+                            ? context.tr('Type a message (Overtime Mode)...')
+                            : context.tr('Type a message...'))
+                      : context.tr('Chat is currently locked'),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -1497,6 +1978,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     vertical: 8,
                   ),
                 ),
+                onChanged: _onComposeChanged,
                 onSubmitted: (_) => canType ? _sendMessage() : null,
               ),
             ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../l10n/app_strings.dart';
 import '../main.dart' show kBrandBlue;
 import '../utils/auth_error_dialog.dart';
 import '../utils/push_notifications.dart';
@@ -27,7 +28,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email and password!')),
+        SnackBar(
+          content: Text(context.tr('Please enter your email and password!')),
+        ),
       );
       return;
     }
@@ -78,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
             destination = const AdminDashboard();
             break;
           default:
-            throw 'Unrecognized role in the system.';
+            throw context.tr('Unrecognized role in the system.');
         }
 
         // MFA (email OTP) is mandatory for every role - see BLUEPRINT.md
@@ -92,15 +95,110 @@ class _LoginScreenState extends State<LoginScreen> {
           (route) => false,
         );
       } else {
-        throw 'User data not found in the database. Make sure the account is registered in Firestore.';
+        if (!mounted) return;
+        throw context.tr(
+          'User data not found in the database. Make sure the account is registered in Firestore.',
+        );
       }
     } catch (e) {
       if (mounted) {
-        showAuthErrorDialog(context, title: 'Login Failed', error: e);
+        showAuthErrorDialog(
+          context,
+          title: context.tr('Login Failed'),
+          error: e,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // Firebase sends the reset email itself (sendPasswordResetEmail) - no
+  // Cloud Function or custom email needed. The success message is
+  // deliberately the same whether or not the email has an account, same
+  // anti-enumeration reasoning as auth_error_dialog.dart's merged
+  // "Incorrect email or password" message.
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.tr('Reset Password')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              context.tr(
+                'Enter your account\'s email and we\'ll send you a link to '
+                'set a new password.',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: context.tr('Email'),
+                prefixIcon: Icon(Icons.email_outlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.tr('Cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: Text(context.tr('Send Link')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (email == null || email.isEmpty) return;
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      if (e.code != 'user-not-found') {
+        if (mounted) {
+          showAuthErrorDialog(
+            context,
+            title: context.tr('Reset Failed'),
+            error: e,
+          );
+        }
+        return;
+      }
+    }
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.tr('Check Your Email')),
+        content: Text(
+          context.tr(
+            'If an account exists for {email}, a password reset link has '
+            'been sent. Check your inbox (and spam folder).',
+            {'email': email},
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.tr('OK')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -136,7 +234,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Welcome back',
+                            context.tr('Welcome back'),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 22,
@@ -148,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Log in to continue to your chats',
+                            context.tr('Log in to continue to your chats'),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 13,
@@ -160,8 +258,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 24),
                           TextField(
                             controller: _emailController,
-                            decoration: const InputDecoration(
-                              labelText: 'Email',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Email'),
                               prefixIcon: Icon(Icons.email_outlined),
                             ),
                             keyboardType: TextInputType.emailAddress,
@@ -169,14 +267,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 14),
                           TextField(
                             controller: _passwordController,
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Password'),
                               prefixIcon: Icon(Icons.lock_outline),
                             ),
                             obscureText: true,
                             onSubmitted: (_) => _login(),
                           ),
-                          const SizedBox(height: 22),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _isLoading ? null : _forgotPassword,
+                              child: Text(context.tr('Forgot password?')),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           SizedBox(
                             height: 52,
                             child: _isLoading
@@ -189,8 +294,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       backgroundColor: kBrandBlue,
                                       foregroundColor: Colors.white,
                                     ),
-                                    child: const Text(
-                                      'Log In',
+                                    child: Text(
+                                      context.tr('Log In'),
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
@@ -252,10 +357,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'TuturEdu is the official chat platform for Pusat Tuisyen Arena '
-          'Matriks, connecting students, parents & tutors in one safe '
-          'conversation space, in line with the tuition centre\'s operating '
-          'hours.',
+          context.tr(
+            'TuturEdu is the official chat platform for Pusat Tuisyen Arena '
+            'Matriks, connecting students, parents & tutors in one safe '
+            'conversation space, in line with the tuition centre\'s '
+            'operating hours.',
+          ),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 12.5,

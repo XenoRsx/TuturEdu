@@ -120,7 +120,8 @@ exports.onNewWarningLetter = onDocumentCreated(
   }
 );
 
-// New announcement -> notify every Student enrolled in its subject (see
+// New announcement -> notify every Student enrolled in its subject, plus
+// each of those students' linked parent (see
 // BLUEPRINT.md 5.19). Queries on `subjects array-contains` only and filters
 // role in code rather than adding `role ==` to the query - combining the two
 // on different fields would need a composite index, and the Teacher(s) of
@@ -139,12 +140,18 @@ exports.onNewAnnouncement = onDocumentCreated(
     const students = usersSnap.docs.filter((doc) => doc.data().role === "Student");
     if (students.length === 0) return;
 
+    // Parents of those students get it too (deduped - one parent with two
+    // kids in the same class is notified once).
+    const parentUids = [...new Set(students.map((doc) => doc.data().parentUid).filter(Boolean))];
+    const parentDocs = await Promise.all(parentUids.map((uid) => db.collection("users").doc(uid).get()));
+    const recipients = [...students, ...parentDocs.filter((doc) => doc.exists)];
+
     const body = (announcement.body || "").length > 120
       ? `${announcement.body.slice(0, 117)}...`
       : (announcement.body || "New announcement");
 
     await Promise.all(
-      students.map((doc) =>
+      recipients.map((doc) =>
         sendAndPruneTokens(
           doc.id,
           doc.data().fcmTokens || [],
@@ -156,6 +163,214 @@ exports.onNewAnnouncement = onDocumentCreated(
     );
   }
 );
+
+// New message report -> notify every Admin so it gets reviewed in Flagged
+// Messages (BLUEPRINT.md 5.22). The message text itself is deliberately NOT
+// put in the push body - only the reason - so reported content doesn't
+// spread further via lock-screen notifications.
+exports.onNewReport = onDocumentCreated(
+  "reports/{reportId}",
+  async (event) => {
+    const report = event.data?.data();
+    if (!report) return;
+
+    const adminsSnap = await db.collection("users").where("role", "==", "Admin").get();
+
+    await Promise.all(
+      adminsSnap.docs.map((doc) =>
+        sendAndPruneTokens(
+          doc.id,
+          doc.data().fcmTokens || [],
+          { title: "🚩 Message reported", body: `Reason: ${report.reason || "Other"}` },
+          { type: "report", reportId: event.params.reportId },
+          doc.data().notificationSound
+        )
+      )
+    );
+  }
+);
+
+// ----- Server-side quiz scoring (BLUEPRINT.md 9.8) -----
+// Answer keys live in quizzes/{quizId}/answerKeys/{questionId} (readable
+// only by the quiz's teacher - see firestore.rules), never on the question
+// docs students read. Quizzes saved before this existed still carry
+// `correctIndex` on the question doc itself; this migrates those on first
+// use (moves the value into answerKeys and strips it from the question) so
+// a legacy quiz stops leaking its answers the first time anyone plays it.
+async function loadAnswerKey(quizId, questionDocs) {
+  const quizRef = db.collection("quizzes").doc(quizId);
+  const keysSnap = await quizRef.collection("answerKeys").get();
+  const keys = {};
+  keysSnap.docs.forEach((doc) => {
+    keys[doc.id] = doc.data().correctIndex;
+  });
+
+  const batch = db.batch();
+  let pending = false;
+  questionDocs.forEach((q) => {
+    const legacy = q.data().correctIndex;
+    if (typeof legacy === "number") {
+      if (typeof keys[q.id] !== "number") keys[q.id] = legacy;
+      batch.set(quizRef.collection("answerKeys").doc(q.id), {
+        correctIndex: keys[q.id],
+        createdBy: q.data().createdBy || null,
+      });
+      batch.update(q.ref, { correctIndex: FieldValue.delete() });
+      pending = true;
+    }
+  });
+  if (pending) await batch.commit();
+
+  return keys;
+}
+
+// Self-Paced submit. Replaces attempt_quiz_screen.dart computing the score
+// itself and writing quizAttempts directly (which let a student write any
+// score they liked) - firestore.rules now denies client writes to
+// quizAttempts entirely, this is the only path in.
+exports.submitQuizAttempt = onCall({ region: "asia-southeast1" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+  const quizId = request.data?.quizId;
+  const answers = request.data?.answers;
+  if (typeof quizId !== "string" || !answers || typeof answers !== "object") {
+    throw new HttpsError("invalid-argument", "Missing quizId or answers.");
+  }
+
+  const [userDoc, quizDoc] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("quizzes").doc(quizId).get(),
+  ]);
+  const user = userDoc.data();
+  const quiz = quizDoc.data();
+  if (!quiz) throw new HttpsError("not-found", "Quiz not found.");
+  if (user?.role !== "Student" || !(user.subjects || []).includes(quiz.subjectLevel)) {
+    throw new HttpsError("permission-denied", "This quiz isn't available for your subjects.");
+  }
+  if (quiz.mode !== "self_paced" && quiz.mode !== "both") {
+    throw new HttpsError("failed-precondition", "This quiz isn't a Self-Paced quiz.");
+  }
+  if (quiz.dueDate && quiz.dueDate.toMillis() < Date.now()) {
+    throw new HttpsError("failed-precondition", "This quiz's due date has passed.");
+  }
+
+  const questionsSnap = await db
+    .collection("quizzes").doc(quizId).collection("questions").orderBy("order").get();
+  const keys = await loadAnswerKey(quizId, questionsSnap.docs);
+
+  let score = 0;
+  let totalPoints = 0;
+  const cleanAnswers = {};
+  const correctAnswers = {};
+  for (const q of questionsSnap.docs) {
+    const data = q.data();
+    const selected = answers[q.id];
+    const optionCount = (data.options || []).length;
+    if (!Number.isInteger(selected) || selected < 0 || selected >= optionCount) {
+      throw new HttpsError("invalid-argument", "Please answer every question before submitting.");
+    }
+    const points = Number.isInteger(data.points) ? data.points : 100;
+    totalPoints += points;
+    cleanAnswers[q.id] = selected;
+    correctAnswers[q.id] = keys[q.id];
+    if (selected === keys[q.id]) score += points;
+  }
+
+  const maxAttempts = Number.isInteger(quiz.maxAttempts) ? quiz.maxAttempts : 1;
+  const attemptRef = db.collection("quizAttempts").doc(`${quizId}_${uid}`);
+
+  const attemptsUsed = await db.runTransaction(async (tx) => {
+    const existing = (await tx.get(attemptRef)).data();
+    // Attempts written before attemptsUsed existed only ever had one.
+    const used = existing ? (existing.attemptsUsed ?? 1) : 0;
+    if (used >= maxAttempts) {
+      throw new HttpsError("failed-precondition", "You've used all your attempts for this quiz.");
+    }
+    tx.set(attemptRef, {
+      quizId,
+      studentUid: uid,
+      status: "completed",
+      startedAt: existing?.startedAt ?? FieldValue.serverTimestamp(),
+      completedAt: FieldValue.serverTimestamp(),
+      score,
+      totalPoints,
+      answers: cleanAnswers,
+      correctAnswers,
+      attemptsUsed: used + 1,
+    });
+    return used + 1;
+  });
+
+  return { score, totalPoints, correctAnswers, attemptsUsed };
+});
+
+// Live Session answer. Replaces live_quiz_play_screen.dart deciding for
+// itself whether it was right and incrementing its own score. Checks the
+// session is mid-question, that it's the question currently being asked,
+// that the time limit (plus a small grace for network lag) hasn't passed,
+// and that this student hasn't already answered it.
+const LIVE_ANSWER_GRACE_MS = 3000;
+
+exports.submitLiveAnswer = onCall({ region: "asia-southeast1" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+  const { sessionId, questionId, selectedIndex } = request.data || {};
+  if (typeof sessionId !== "string" || typeof questionId !== "string" || !Number.isInteger(selectedIndex)) {
+    throw new HttpsError("invalid-argument", "Missing sessionId, questionId or selectedIndex.");
+  }
+
+  const sessionRef = db.collection("quizSessions").doc(sessionId);
+  const session = (await sessionRef.get()).data();
+  if (!session) throw new HttpsError("not-found", "Session not found.");
+  if (session.status !== "active") {
+    throw new HttpsError("failed-precondition", "This question is no longer open.");
+  }
+
+  const questionsSnap = await db
+    .collection("quizzes").doc(session.quizId).collection("questions").orderBy("order").get();
+  const current = questionsSnap.docs[session.currentQuestionIndex ?? 0];
+  if (!current || current.id !== questionId) {
+    throw new HttpsError("failed-precondition", "This question is no longer open.");
+  }
+
+  const question = current.data();
+  const limitMs = (Number.isInteger(question.timeLimitSeconds) ? question.timeLimitSeconds : 20) * 1000;
+  const startedAtMs = session.currentQuestionStartedAt?.toMillis?.() ?? Date.now();
+  const elapsedMs = Math.max(0, Date.now() - startedAtMs);
+  if (elapsedMs > limitMs + LIVE_ANSWER_GRACE_MS) {
+    throw new HttpsError("deadline-exceeded", "Time's up for this question.");
+  }
+  if (selectedIndex < 0 || selectedIndex >= (question.options || []).length) {
+    throw new HttpsError("invalid-argument", "Invalid option.");
+  }
+
+  const keys = await loadAnswerKey(session.quizId, questionsSnap.docs);
+  const correctIndex = keys[questionId];
+  const correct = selectedIndex === correctIndex;
+  const points = Number.isInteger(question.points) ? question.points : 100;
+
+  const participantRef = sessionRef.collection("participants").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const participant = (await tx.get(participantRef)).data();
+    if (!participant) throw new HttpsError("permission-denied", "You haven't joined this session.");
+    if (participant.answers && participant.answers[questionId]) {
+      throw new HttpsError("already-exists", "You've already answered this question.");
+    }
+    tx.update(participantRef, {
+      [`answers.${questionId}`]: {
+        selectedIndex,
+        correct,
+        correctIndex,
+        timeTakenMs: Math.min(elapsedMs, limitMs),
+      },
+      score: FieldValue.increment(correct ? points : 0),
+    });
+  });
+
+  return { correct, correctIndex };
+});
 
 // Admin-only: permanently deletes ANOTHER user's account (Firebase Auth +
 // Firestore profile). Needs the Admin SDK - the client SDK can only ever
@@ -338,5 +553,14 @@ exports.verifyMfaCode = onCall({ region: "asia-southeast1" }, async (request) =>
   }
 
   await docRef.delete();
+
+  // A correct OTP proves the caller controls this account's email inbox -
+  // the same thing Firebase's own sendEmailVerification() link proves - so
+  // record it as Firebase Auth's emailVerified flag instead of making the
+  // user click a second, redundant verification link at sign-up.
+  if (request.auth.token.email_verified !== true) {
+    await auth.updateUser(uid, { emailVerified: true });
+  }
+
   return { success: true };
 });

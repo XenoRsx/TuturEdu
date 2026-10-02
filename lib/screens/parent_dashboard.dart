@@ -8,6 +8,7 @@
 // (linked student's attendance/performance) and "Warning Letters".
 
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/stat_tile.dart';
 import 'chat_list_screen.dart';
@@ -35,18 +36,18 @@ class ParentDashboard extends StatelessWidget {
                 backgroundColor: Color(0x1AFF9800),
                 child: Icon(Icons.chat, color: Colors.orange),
               ),
-              title: const Text('Message a Teacher'),
-              subtitle: const Text(
-                "Search your child's teacher and start a 1:1 chat",
+              title: Text(context.tr('Message a Teacher')),
+              subtitle: Text(
+                context.tr('Search your child\'s teacher and start a 1:1 chat'),
               ),
               onTap: () {
                 Navigator.pop(sheetContext);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const UserSearchScreen(
+                    builder: (_) => UserSearchScreen(
                       targetRole: 'Teacher',
-                      title: 'Find a Teacher',
+                      title: context.tr('Find a Teacher'),
                       accentColor: Colors.orange,
                     ),
                   ),
@@ -68,17 +69,21 @@ class ParentDashboard extends StatelessWidget {
   }) {
     return DashboardHeader(
       stats: [
-        StatTile(value: '$totalUnread', label: 'Unread', color: Colors.orange),
+        StatTile(
+          value: '$totalUnread',
+          label: context.tr('Unread'),
+          color: Colors.orange,
+        ),
         StatTile(
           value: '$totalChats',
-          label: 'Total Chats',
+          label: context.tr('Total Chats'),
           color: Colors.blue,
         ),
       ],
       actions: [
         QuickAction(
           icon: Icons.family_restroom,
-          label: 'My Child',
+          label: context.tr('My Child'),
           color: Colors.orange,
           onTap: () => Navigator.push(
             context,
@@ -87,7 +92,7 @@ class ParentDashboard extends StatelessWidget {
         ),
         QuickAction(
           icon: Icons.warning_amber_rounded,
-          label: 'Warning Letters',
+          label: context.tr('Warning Letters'),
           color: Colors.red,
           onTap: () => Navigator.push(
             context,
@@ -107,7 +112,7 @@ class ParentDashboard extends StatelessWidget {
       homeHeader: _buildHeader,
       extraActions: [
         IconButton(
-          tooltip: 'Settings',
+          tooltip: context.tr('Settings'),
           icon: const Icon(Icons.settings_outlined),
           onPressed: () => Navigator.push(
             context,

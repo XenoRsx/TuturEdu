@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/app_card.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/section_label.dart';
@@ -77,11 +78,11 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
     final title = _titleController.text.trim();
     final body = _bodyController.text.trim();
     if (_selectedSubject == null) {
-      _showSnack('Please choose a subject.');
+      _showSnack(context.tr('Please choose a subject.'));
       return;
     }
     if (title.isEmpty || body.isEmpty) {
-      _showSnack('Please fill in both the title and the message.');
+      _showSnack(context.tr('Please fill in both the title and the message.'));
       return;
     }
 
@@ -97,10 +98,14 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
         'readBy': <String>[],
       });
       if (!mounted) return;
-      _showSnack('Announcement sent to $_selectedSubject students.');
+      _showSnack(
+        context.tr('Announcement sent to {subject} students.', {
+          'subject': _selectedSubject,
+        }),
+      );
       Navigator.pop(context);
     } catch (e) {
-      _showSnack('Failed to send announcement: $e');
+      _showSnack(context.tr('Failed to send announcement: {e}', {'e': e}));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -110,28 +115,29 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Announcement'),
+        title: Text(context.tr('New Announcement')),
         backgroundColor: Colors.green,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _subjects.isEmpty
-          ? const EmptyState(
+          ? EmptyState(
               icon: Icons.menu_book_outlined,
-              title: 'No subjects assigned yet',
-              subtitle:
-                  'Pick your subjects in Settings first, then you can send '
-                  'announcements to those classes.',
+              title: context.tr('No subjects assigned yet'),
+              subtitle: context.tr(
+                'Pick your subjects in Settings first, then you can send '
+                'announcements to those classes.',
+              ),
             )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const SectionLabel('Send to'),
+                SectionLabel(context.tr('Send to')),
                 AppCard(
                   child: DropdownButtonFormField<String>(
                     initialValue: _selectedSubject,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject / Class',
+                    decoration: InputDecoration(
+                      labelText: context.tr('Subject / Class'),
                       prefixIcon: Icon(Icons.groups_outlined),
                     ),
                     items: _subjects
@@ -142,7 +148,7 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const SectionLabel('Announcement'),
+                SectionLabel(context.tr('Announcement')),
                 AppCard(
                   child: Column(
                     children: [
@@ -150,9 +156,11 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
                         controller: _titleController,
                         textCapitalization: TextCapitalization.sentences,
                         maxLength: 80,
-                        decoration: const InputDecoration(
-                          labelText: 'Title',
-                          hintText: 'e.g. Extra class this Saturday',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Title'),
+                          hintText: context.tr(
+                            'e.g. Extra class this Saturday',
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -162,8 +170,8 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
                         minLines: 4,
                         maxLines: 10,
                         maxLength: 1000,
-                        decoration: const InputDecoration(
-                          labelText: 'Message',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Message'),
                           alignLabelWithHint: true,
                         ),
                       ),
@@ -185,7 +193,11 @@ class _CreateAnnouncementScreenState extends State<CreateAnnouncementScreen> {
                             ),
                           )
                         : const Icon(Icons.campaign_outlined),
-                    label: Text(_sending ? 'Sending...' : 'Send Announcement'),
+                    label: Text(
+                      _sending
+                          ? context.tr('Sending...')
+                          : context.tr('Send Announcement'),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,

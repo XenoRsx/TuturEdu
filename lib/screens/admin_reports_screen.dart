@@ -8,6 +8,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/pdf_reports.dart';
 import '../widgets/section_label.dart';
 import '../widgets/stat_tile.dart';
 
@@ -84,6 +85,33 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     await future;
   }
 
+  // Same numbers as on screen. Per-subject attendance/performance PDFs are
+  // teacher-side instead - Admin can't read `attendance` under its rules.
+  Future<void> _exportPdf() async {
+    final s = await _statsFuture;
+    final totalUsers =
+        s['students']! + s['teachers']! + s['parents']! + s['admins']!;
+    await exportPdfReport(
+      title: 'System Report',
+      filename: 'tuturedu_system_report.pdf',
+      headers: const ['Section', 'Metric', 'Count'],
+      rows: [
+        ['Users', 'Total users', '$totalUsers'],
+        ['Users', 'Students', '${s['students']}'],
+        ['Users', 'Teachers', '${s['teachers']}'],
+        ['Users', 'Parents', '${s['parents']}'],
+        ['Users', 'Admins', '${s['admins']}'],
+        ['Communication', 'Total chats', '${s['chats']}'],
+        ['Communication', 'Group chats', '${s['groupChats']}'],
+        ['Interactive Quiz', 'Quizzes created', '${s['quizzes']}'],
+        ['Interactive Quiz', 'Live sessions', '${s['quizSessions']}'],
+        ['Interactive Quiz', 'Self-paced attempts', '${s['quizAttempts']}'],
+        ['Academic', 'Subjects in catalog', '${s['subjects']}'],
+        ['Academic', 'Warning letters sent', '${s['warningLetters']}'],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -91,6 +119,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         title: const Text('Reports'),
         backgroundColor: Colors.deepPurple,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'Export PDF',
+            onPressed: () => runPdfExport(context, _exportPdf),
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
         ],
       ),

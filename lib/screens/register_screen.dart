@@ -11,6 +11,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../l10n/app_strings.dart';
 import '../main.dart' show kBrandBlue, kBrandGreen;
 import '../utils/auth_error_dialog.dart';
 import '../utils/push_notifications.dart';
@@ -46,15 +47,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final confirmPassword = _confirmPasswordController.text.trim();
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      _showSnack('Please fill in all fields.');
+      _showSnack(context.tr('Please fill in all fields.'));
       return;
     }
     if (password.length < 6) {
-      _showSnack('Password must be at least 6 characters.');
+      _showSnack(context.tr('Password must be at least 6 characters.'));
       return;
     }
     if (password != confirmPassword) {
-      _showSnack('Password and Confirm Password do not match.');
+      _showSnack(context.tr('Password and Confirm Password do not match.'));
       return;
     }
 
@@ -108,7 +109,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } catch (e) {
       if (mounted) {
-        showAuthErrorDialog(context, title: 'Sign Up Failed', error: e);
+        showAuthErrorDialog(
+          context,
+          title: context.tr('Sign Up Failed'),
+          error: e,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -152,7 +157,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Create a New Account',
+                        context.tr('Create a New Account'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 22,
@@ -162,7 +167,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Join TuturEdu in a few seconds',
+                        context.tr('Join TuturEdu in a few seconds'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 13,
@@ -173,8 +178,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       TextField(
                         controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Full Name',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Full Name'),
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                       ),
@@ -183,8 +188,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Email'),
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
                       ),
@@ -193,8 +198,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       TextField(
                         controller: _passwordController,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Password (min. 6 characters)',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Password (min. 6 characters)'),
                           prefixIcon: Icon(Icons.lock_outline),
                         ),
                       ),
@@ -203,8 +208,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       TextField(
                         controller: _confirmPasswordController,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm Password',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Confirm Password'),
                           prefixIcon: Icon(Icons.lock_outline),
                         ),
                       ),
@@ -212,15 +217,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       DropdownButtonFormField<String>(
                         initialValue: _selectedRole,
-                        decoration: const InputDecoration(
-                          labelText: 'Register As',
+                        decoration: InputDecoration(
+                          labelText: context.tr('Register As'),
                           prefixIcon: Icon(Icons.badge_outlined),
                         ),
                         items: _roles
                             .map(
                               (role) => DropdownMenuItem(
                                 value: role,
-                                child: Text(role),
+                                child: Text(context.trRole(role)),
                               ),
                             )
                             .toList(),
@@ -242,8 +247,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   backgroundColor: kBrandGreen,
                                   foregroundColor: Colors.white,
                                 ),
-                                child: const Text(
-                                  'Sign Up',
+                                child: Text(
+                                  context.tr('Sign Up'),
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -265,7 +270,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: TextButton.styleFrom(
                           foregroundColor: kBrandBlue,
                         ),
-                        child: const Text('Already have an account? Log In'),
+                        child: Text(
+                          context.tr('Already have an account? Log In'),
+                        ),
                       ),
                     ],
                   ),

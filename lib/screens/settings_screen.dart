@@ -24,6 +24,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../main.dart' show kBrandBlue, kInkMuted;
 import '../utils/notification_sounds.dart';
 import '../utils/push_notifications.dart';
@@ -76,21 +77,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Profile'),
+        title: Text(context.tr('Edit Profile')),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Full Name'),
+          decoration: InputDecoration(labelText: context.tr('Full Name')),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Save'),
+            child: Text(context.tr('Save')),
           ),
         ],
       ),
@@ -98,7 +99,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (result == null || result.isEmpty) return;
     await _userRef.update({'name': result});
-    _showSnack('Profile updated.');
+    if (!mounted) return;
+    _showSnack(context.tr('Profile updated.'));
   }
 
   // ----- Change Password -----
@@ -110,27 +112,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Change Password'),
+        title: Text(context.tr('Change Password')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: currentController,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Current Password'),
+              decoration: InputDecoration(
+                labelText: context.tr('Current Password'),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: newController,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'New Password'),
+              decoration: InputDecoration(
+                labelText: context.tr('New Password'),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: confirmController,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Confirm New Password',
+              decoration: InputDecoration(
+                labelText: context.tr('Confirm New Password'),
               ),
             ),
           ],
@@ -138,11 +144,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Change'),
+            child: Text(context.tr('Change')),
           ),
         ],
       ),
@@ -152,11 +158,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final newPassword = newController.text;
     if (newPassword.length < 6) {
-      _showSnack('New password must be at least 6 characters.');
+      if (!mounted) return;
+      _showSnack(context.tr('New password must be at least 6 characters.'));
       return;
     }
     if (newPassword != confirmController.text) {
-      _showSnack('New passwords do not match.');
+      if (!mounted) return;
+      _showSnack(context.tr('New passwords do not match.'));
       return;
     }
 
@@ -164,13 +172,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final ok = await _reauthenticate(currentController.text);
       if (!ok) {
-        _showSnack('Current password is incorrect.');
+        if (!mounted) return;
+        _showSnack(context.tr('Current password is incorrect.'));
         return;
       }
       await _authUser.updatePassword(newPassword);
-      _showSnack('Password changed successfully.');
+      if (!mounted) return;
+      _showSnack(context.tr('Password changed successfully.'));
     } on FirebaseAuthException catch (e) {
-      _showSnack('Error: ${e.message}');
+      if (!mounted) return;
+      _showSnack(context.tr('Error: {e}', {'e': e.message}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -210,8 +221,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'leaveStart': Timestamp.fromDate(start),
       'leaveEnd': Timestamp.fromDate(end),
     });
+    if (!mounted) return;
     _showSnack(
-      'Leave dates set. Chats will lock automatically during this period.',
+      context.tr(
+        'Leave dates set. Chats will lock automatically during this period.',
+      ),
     );
   }
 
@@ -220,7 +234,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'leaveStart': FieldValue.delete(),
       'leaveEnd': FieldValue.delete(),
     });
-    _showSnack('Leave dates cleared.');
+    if (!mounted) return;
+    _showSnack(context.tr('Leave dates cleared.'));
   }
 
   // ----- My Subjects (Teacher self-service, see BLUEPRINT.md) -----
@@ -242,7 +257,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (allSubjects.isEmpty) {
       _showSnack(
-        'Subject catalog is empty. Ask an Admin to add subjects first.',
+        context.tr(
+          'Subject catalog is empty. Ask an Admin to add subjects first.',
+        ),
       );
       return;
     }
@@ -253,7 +270,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('My Subjects'),
+          title: Text(context.tr('My Subjects')),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView(
@@ -279,14 +296,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.tr('Cancel')),
             ),
             ElevatedButton(
               onPressed: () async {
                 await _userRef.update({'subjects': selected.toList()});
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('Save'),
+              child: Text(context.tr('Save')),
             ),
           ],
         ),
@@ -301,6 +318,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // screen happens to be open.
   Future<void> _setThemeMode(String mode) async {
     await _userRef.update({'themeMode': mode});
+  }
+
+  // Applied app-wide by main.dart's users/{uid} listener - set the notifier
+  // too so the switch is instant rather than waiting on the round trip.
+  Future<void> _setLanguage(String language) async {
+    languageNotifier.value = localeFromLanguage(language);
+    await _userRef.update({'language': language});
   }
 
   // ----- Push notifications on/off -----
@@ -338,33 +362,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Account'),
+        title: Text(context.tr('Delete Account')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'This permanently deletes your account and profile. This '
-              'cannot be undone. Enter your password to confirm.',
+            Text(
+              context.tr(
+                'This permanently deletes your account and profile. This '
+                'cannot be undone. Enter your password to confirm.',
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: passwordController,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration: InputDecoration(labelText: context.tr('Password')),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(context.tr('Cancel')),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text(
-              'Delete Account',
+            child: Text(
+              context.tr('Delete Account'),
               style: TextStyle(color: Colors.white),
             ),
           ),
@@ -378,7 +404,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final ok = await _reauthenticate(passwordController.text);
       if (!ok) {
-        _showSnack('Password is incorrect.');
+        if (!mounted) return;
+        _showSnack(context.tr('Password is incorrect.'));
         return;
       }
 
@@ -393,7 +420,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      _showSnack('Error: ${e.message}');
+      if (!mounted) return;
+      _showSnack(context.tr('Error: {e}', {'e': e.message}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -407,7 +435,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(context.tr('Settings')),
         backgroundColor: Colors.blueGrey,
       ),
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -464,7 +492,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                             Text(
-                              role,
+                              context.trRole(role),
                               style: TextStyle(
                                 color: Theme.of(
                                   context,
@@ -477,7 +505,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.edit_outlined),
-                        tooltip: 'Edit Profile',
+                        tooltip: context.tr('Edit Profile'),
                         onPressed: () => _openEditProfileDialog(name),
                       ),
                     ],
@@ -485,7 +513,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                const SectionLabel('Appearance'),
+                SectionLabel(context.tr('Appearance')),
                 AppCard(
                   padding: EdgeInsets.zero,
                   child: RadioGroup<String>(
@@ -493,26 +521,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onChanged: (value) {
                       if (value != null) _setThemeMode(value);
                     },
-                    child: const Column(
+                    child: Column(
                       children: [
                         RadioListTile<String>(
                           value: 'system',
                           secondary: Icon(Icons.brightness_auto_outlined),
-                          title: Text('System'),
+                          title: Text(context.tr('System')),
                           activeColor: kBrandBlue,
                         ),
                         Divider(height: 1),
                         RadioListTile<String>(
                           value: 'light',
                           secondary: Icon(Icons.light_mode_outlined),
-                          title: Text('Light'),
+                          title: Text(context.tr('Light')),
                           activeColor: kBrandBlue,
                         ),
                         Divider(height: 1),
                         RadioListTile<String>(
                           value: 'dark',
                           secondary: Icon(Icons.dark_mode_outlined),
-                          title: Text('Dark'),
+                          title: Text(context.tr('Dark')),
+                          activeColor: kBrandBlue,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Account-level, same as Appearance (BLUEPRINT.md 5.26).
+                // Unset = device language, so show whichever is in effect.
+                SectionLabel(context.tr('Language')),
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: RadioGroup<String>(
+                    groupValue:
+                        (data['language'] as String?) ??
+                        (context.isMalay ? 'ms' : 'en'),
+                    onChanged: (value) {
+                      if (value != null) _setLanguage(value);
+                    },
+                    child: const Column(
+                      children: [
+                        RadioListTile<String>(
+                          value: 'en',
+                          secondary: Icon(Icons.language),
+                          title: Text('English'),
+                          activeColor: kBrandBlue,
+                        ),
+                        Divider(height: 1),
+                        RadioListTile<String>(
+                          value: 'ms',
+                          secondary: Icon(Icons.translate),
+                          title: Text('Bahasa Melayu'),
                           activeColor: kBrandBlue,
                         ),
                       ],
@@ -522,7 +583,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 16),
 
                 if (role == 'Teacher') ...[
-                  const SectionLabel('Leave / Holiday'),
+                  SectionLabel(context.tr('Leave / Holiday')),
                   AppCard(
                     padding: EdgeInsets.zero,
                     child: Column(
@@ -534,22 +595,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           title: Text(
                             leaveStart != null && leaveEnd != null
-                                ? 'On leave: ${_formatDate(leaveStart)} - ${_formatDate(leaveEnd)}'
-                                : 'No leave dates set',
+                                ? context.tr('On leave: {from} - {to}', {
+                                    'from': _formatDate(leaveStart),
+                                    'to': _formatDate(leaveEnd),
+                                  })
+                                : context.tr('No leave dates set'),
                           ),
-                          subtitle: const Text(
-                            'Chats lock automatically for this date range, same as manual Off-Duty.',
+                          subtitle: Text(
+                            context.tr(
+                              'Chats lock automatically for this date range, same as manual Off-Duty.',
+                            ),
                           ),
                           trailing: TextButton(
                             onPressed: () =>
                                 _pickLeaveDates(leaveStart, leaveEnd),
-                            child: const Text('Set'),
+                            child: Text(context.tr('Set')),
                           ),
                         ),
                         if (leaveStart != null && leaveEnd != null)
                           ListTile(
                             leading: const Icon(Icons.close, color: Colors.red),
-                            title: const Text('Clear leave dates'),
+                            title: Text(context.tr('Clear leave dates')),
                             onTap: _clearLeaveDates,
                           ),
                       ],
@@ -557,7 +623,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  const SectionLabel('My Subjects'),
+                  SectionLabel(context.tr('My Subjects')),
                   AppCard(
                     padding: EdgeInsets.zero,
                     child: ListTile(
@@ -567,23 +633,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       title: Text(
                         mySubjects.isEmpty
-                            ? 'No subjects selected yet'
+                            ? context.tr('No subjects selected yet')
                             : mySubjects.join(', '),
                       ),
-                      subtitle: const Text(
-                        'Subjects you teach - controls which chats/classes '
-                        'you can manage attendance, performance, and quizzes '
-                        'for.',
+                      subtitle: Text(
+                        context.tr(
+                          'Subjects you teach - controls which chats/classes '
+                          'you can manage attendance, performance, and '
+                          'quizzes for.',
+                        ),
                       ),
                       trailing: TextButton(
                         onPressed: () => _editMySubjects(mySubjects),
-                        child: const Text('Edit'),
+                        child: Text(context.tr('Edit')),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  const SectionLabel('Announcements'),
+                  SectionLabel(context.tr('Announcements')),
                   AppCard(
                     padding: EdgeInsets.zero,
                     child: ListTile(
@@ -591,10 +659,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Icons.campaign_outlined,
                         color: kBrandBlue,
                       ),
-                      title: const Text('My Announcements'),
-                      subtitle: const Text(
-                        'Send a notice to every student in one of your '
-                        'subjects',
+                      title: Text(context.tr('My Announcements')),
+                      subtitle: Text(
+                        context.tr(
+                          'Send a notice to every student in one of your '
+                          'subjects',
+                        ),
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.push(
@@ -608,8 +678,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                if (role == 'Student') ...[
-                  const SectionLabel('Announcements'),
+                if (role == 'Student' || role == 'Parent') ...[
+                  SectionLabel(context.tr('Announcements')),
                   AppCard(
                     padding: EdgeInsets.zero,
                     child: ListTile(
@@ -617,8 +687,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Icons.campaign_outlined,
                         color: kBrandBlue,
                       ),
-                      title: const Text('Announcements'),
-                      subtitle: const Text('Notices from your teachers'),
+                      title: Text(context.tr('Announcements')),
+                      subtitle: Text(context.tr('Notices from your teachers')),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.push(
                         context,
@@ -631,7 +701,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                const SectionLabel('Notifications'),
+                SectionLabel(context.tr('Notifications')),
                 AppCard(
                   padding: EdgeInsets.zero,
                   child: SwitchListTile(
@@ -639,15 +709,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icons.notifications_outlined,
                       color: kBrandBlue,
                     ),
-                    title: const Text('Push Notifications'),
-                    subtitle: const Text('New messages and warning letters'),
+                    title: Text(context.tr('Push Notifications')),
+                    subtitle: Text(
+                      context.tr('New messages and warning letters'),
+                    ),
                     value: pushEnabled,
                     onChanged: _togglePush,
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                const SectionLabel('Notification Sound'),
+                SectionLabel(context.tr('Notification Sound')),
                 AppCard(
                   padding: EdgeInsets.zero,
                   child: RadioGroup<String>(
@@ -660,10 +732,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         return RadioListTile<String>(
                           value: option.id,
                           activeColor: kBrandBlue,
-                          title: Text(option.label),
+                          title: Text(context.tr(option.label)),
                           secondary: IconButton(
                             icon: const Icon(Icons.play_circle_outline),
-                            tooltip: 'Preview',
+                            tooltip: context.tr('Preview'),
                             onPressed: () => playNotificationSound(option.id),
                           ),
                         );
@@ -673,7 +745,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                const SectionLabel('Account'),
+                SectionLabel(context.tr('Account')),
                 AppCard(
                   padding: EdgeInsets.zero,
                   child: Column(
@@ -683,14 +755,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           Icons.lock_outline,
                           color: kBrandBlue,
                         ),
-                        title: const Text('Change Password'),
+                        title: Text(context.tr('Change Password')),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: _openChangePasswordDialog,
                       ),
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.logout, color: kInkMuted),
-                        title: const Text('Log Out'),
+                        title: Text(context.tr('Log Out')),
                         onTap: _logout,
                       ),
                     ],
@@ -698,7 +770,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                const SectionLabel('Delete account'),
+                SectionLabel(context.tr('Delete account')),
                 AppCard(
                   padding: EdgeInsets.zero,
                   child: ListTile(
@@ -706,12 +778,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icons.delete_forever,
                       color: Colors.red,
                     ),
-                    title: const Text(
-                      'Delete Account',
+                    title: Text(
+                      context.tr('Delete Account'),
                       style: TextStyle(color: Colors.red),
                     ),
-                    subtitle: const Text(
-                      'Permanently delete your account and profile',
+                    subtitle: Text(
+                      context.tr('Permanently delete your account and profile'),
                     ),
                     onTap: _openDeleteAccountDialog,
                   ),

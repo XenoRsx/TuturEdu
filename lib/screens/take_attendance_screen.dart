@@ -13,6 +13,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/pdf_reports.dart';
 
 class TakeAttendanceScreen extends StatefulWidget {
   const TakeAttendanceScreen({super.key});
@@ -177,12 +178,80 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
   }
 
+  // Whole-subject summary (every date ever marked, not just the selected
+  // one). `where('subject', ==)` is what lets the attendance read rule's
+  // teachesSubject(resource.data.subject) check pass for a query - and a
+  // single-field equality filter needs no composite index.
+  Future<void> _exportPdf(String subject) async {
+    final db = FirebaseFirestore.instance;
+    final studentsSnap = await db
+        .collection('users')
+        .where('role', isEqualTo: 'Student')
+        .where('subjects', arrayContains: subject)
+        .get();
+    final students = [...studentsSnap.docs]
+      ..sort(
+        (a, b) => (a.data()['name'] as String? ?? '').toLowerCase().compareTo(
+          (b.data()['name'] as String? ?? '').toLowerCase(),
+        ),
+      );
+
+    final records = await Future.wait(
+      students.map(
+        (s) => db
+            .collection('attendance')
+            .doc(s.id)
+            .collection('records')
+            .where('subject', isEqualTo: subject)
+            .get(),
+      ),
+    );
+
+    var totalPresent = 0;
+    var totalMarked = 0;
+    final rows = <List<String>>[];
+    for (var i = 0; i < students.length; i++) {
+      final docs = records[i].docs;
+      final present = docs.where((d) => d.data()['status'] == 'present').length;
+      totalPresent += present;
+      totalMarked += docs.length;
+      rows.add([
+        students[i].data()['name'] as String? ?? 'Unnamed',
+        '$present',
+        '${docs.length - present}',
+        '${docs.length}',
+        docs.isEmpty ? '-' : '${(present * 100 / docs.length).round()}%',
+      ]);
+    }
+
+    await exportPdfReport(
+      title: 'Attendance Report',
+      subtitle: subject,
+      filename: 'attendance_${pdfFileSlug(subject)}.pdf',
+      summaryLines: [
+        'Students enrolled: ${students.length}',
+        'Overall attendance: ${totalMarked == 0 ? 'No records yet' : '${(totalPresent * 100 / totalMarked).round()}%'}',
+      ],
+      headers: const ['Student', 'Present', 'Absent', 'Classes', 'Rate'],
+      rows: rows,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Take Attendance'),
         backgroundColor: Colors.green,
+        actions: [
+          if (_selectedSubject != null)
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              tooltip: 'Export attendance summary (PDF)',
+              onPressed: () =>
+                  runPdfExport(context, () => _exportPdf(_selectedSubject!)),
+            ),
+        ],
       ),
       body: _loadingSubjects
           ? const Center(child: CircularProgressIndicator())

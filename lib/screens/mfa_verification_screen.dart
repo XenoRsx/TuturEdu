@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../l10n/app_strings.dart';
 import '../main.dart' show kBrandBlue;
 import 'welcome_screen.dart';
 
@@ -86,7 +87,9 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
       _startCooldown();
     } on FirebaseFunctionsException catch (e) {
       if (mounted) {
-        setState(() => _error = e.message ?? 'Could not send the code.');
+        setState(
+          () => _error = e.message ?? context.tr('Could not send the code.'),
+        );
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -111,7 +114,7 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
   Future<void> _verify() async {
     final code = _codeController.text.trim();
     if (code.length != 6) {
-      setState(() => _error = 'Enter the 6-digit code.');
+      setState(() => _error = context.tr('Enter the 6-digit code.'));
       return;
     }
 
@@ -128,7 +131,9 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
         (route) => false,
       );
     } on FirebaseFunctionsException catch (e) {
-      if (mounted) setState(() => _error = e.message ?? 'Incorrect code.');
+      if (mounted) {
+        setState(() => _error = e.message ?? context.tr('Incorrect code.'));
+      }
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
@@ -150,7 +155,8 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final email = FirebaseAuth.instance.currentUser?.email ?? 'your email';
+    final email =
+        FirebaseAuth.instance.currentUser?.email ?? context.tr('your email');
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -166,7 +172,7 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Check your email',
+                  context.tr('Check your email'),
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -176,8 +182,12 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                 const SizedBox(height: 8),
                 Text(
                   _sending
-                      ? 'Sending a 6-digit code to $email…'
-                      : 'We sent a 6-digit code to $email',
+                      ? context.tr('Sending a 6-digit code to {email}…', {
+                          'email': email,
+                        })
+                      : context.tr('We sent a 6-digit code to {email}', {
+                          'email': email,
+                        }),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13.5,
@@ -227,8 +237,8 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text(
-                            'Verify',
+                        : Text(
+                            context.tr('Verify'),
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
@@ -243,13 +253,15 @@ class _MfaVerificationScreenState extends State<MfaVerificationScreen> {
                       : _sendCode,
                   child: Text(
                     _resendCooldown > 0
-                        ? 'Resend code in ${_resendCooldown}s'
-                        : 'Resend code',
+                        ? context.tr('Resend code in {s}s', {
+                            's': _resendCooldown,
+                          })
+                        : context.tr('Resend code'),
                   ),
                 ),
                 TextButton(
                   onPressed: _cancel,
-                  child: const Text('Cancel and sign out'),
+                  child: Text(context.tr('Cancel and sign out')),
                 ),
               ],
             ),

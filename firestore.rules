@@ -149,11 +149,12 @@ service cloud.firestore {
                               request.auth.uid == resource.data.createdBy;
 
       // Sub-collection: questions
-      // Nota 1: correctIndex boleh dibaca oleh sesiapa yang login - perlu
-      // sebab markah dikira client-side semasa main (tiada Cloud Function
-      // untuk sembunyikan jawapan betul sehingga selepas dijawab). Had FYP
-      // semasa, diterima sebagai trade-off - rujuk BLUEPRINT.md 8.5 untuk
-      // nota serupa pasal client-side vs server-side validation.
+      // Nota 1: jawapan betul (correctIndex) TIDAK lagi disimpan di sini -
+      // dipindah ke answerKeys di bawah (rujuk BLUEPRINT.md 9.8). Dulu
+      // sesiapa yang login boleh baca correctIndex terus dari question doc
+      // (markah dikira client-side). Create/update kini MENOLAK sebarang
+      // write yang bawa field correctIndex, supaya jawapan tak bocor balik
+      // ke sini secara tak sengaja.
       // Nota 2: `createdBy` di-denormalize terus pada setiap question doc
       // (bukan get() ke parent quiz) sebab quiz + questions dicipta dalam
       // SATU batch write - get() ke parent akan gagal masa tu sebab
@@ -161,6 +162,24 @@ service cloud.firestore {
       // write lain dalam batch yang sama.
       match /questions/{questionId} {
         allow read: if request.auth != null;
+        allow create: if request.auth != null &&
+                       request.auth.uid == request.resource.data.createdBy &&
+                       !('correctIndex' in request.resource.data);
+        allow update: if request.auth != null &&
+                       request.auth.uid == resource.data.createdBy &&
+                       !('correctIndex' in request.resource.data);
+        allow delete: if request.auth != null &&
+                       request.auth.uid == resource.data.createdBy;
+      }
+
+      // Sub-collection: answerKeys (doc ID = questionId) - jawapan betul,
+      // HANYA teacher pencipta (atau Admin) boleh baca. Student tak boleh
+      // baca langsung - markah dikira oleh Cloud Function submitQuizAttempt
+      // / submitLiveAnswer (Admin SDK, bypass rules). `createdBy`
+      // di-denormalize atas sebab yang sama macam questions (Nota 2).
+      match /answerKeys/{questionId} {
+        allow read: if request.auth != null &&
+                     (request.auth.uid == resource.data.createdBy || isAdmin());
         allow create: if request.auth != null &&
                        request.auth.uid == request.resource.data.createdBy;
         allow update, delete: if request.auth != null &&
@@ -180,13 +199,24 @@ service cloud.firestore {
       allow delete: if false;
 
       // Sub-collection: participants
-      // - Student cipta/kemaskini dokumen DIA SENDIRI sahaja (nama, score,
-      //   jawapan) - had FYP: score dikira & ditulis client-side, tiada
-      //   pengesahan server (sama trade-off macam questions.correctIndex di atas)
+      // - Student cipta dokumen DIA SENDIRI sahaja masa join, dengan score 0
+      //   dan answers kosong. Jawapan + markah TIDAK boleh ditulis dari
+      //   client lagi - hanya Cloud Function submitLiveAnswer (Admin SDK)
+      //   yang tulis answers/score, selepas semak jawapan dengan answerKeys.
+      // - Update dari client hanya dibenarkan untuk join semula (set() ke
+      //   dokumen sedia ada) SEBELUM menjawab apa-apa - score kekal 0,
+      //   answers kekal kosong.
       match /participants/{studentUid} {
         allow read: if request.auth != null;
-        allow create, update: if request.auth != null &&
-                                request.auth.uid == studentUid;
+        allow create: if request.auth != null &&
+                       request.auth.uid == studentUid &&
+                       request.resource.data.score == 0 &&
+                       request.resource.data.answers.size() == 0;
+        allow update: if request.auth != null &&
+                       request.auth.uid == studentUid &&
+                       resource.data.answers.size() == 0 &&
+                       request.resource.data.score == 0 &&
+                       request.resource.data.answers.size() == 0;
         allow delete: if false;
       }
     }
@@ -228,11 +258,11 @@ service cloud.firestore {
                     isAdmin() ||
                     (exists(/databases/$(database)/documents/quizzes/$(resource.data.quizId)) &&
                      get(/databases/$(database)/documents/quizzes/$(resource.data.quizId)).data.createdBy == request.auth.uid));
-      allow create: if request.auth != null &&
-                     request.auth.uid == request.resource.data.studentUid;
-      allow update: if request.auth != null &&
-                     request.auth.uid == resource.data.studentUid;
-      allow delete: if false;
+      // Tiada write dari client langsung - attempt hanya ditulis oleh Cloud
+      // Function submitQuizAttempt (Admin SDK), yang kira markah sendiri
+      // dari answerKeys dan semak due date + had retake di server. Dulu
+      // student tulis terus (termasuk `score`), jadi markah boleh dipalsukan.
+      allow create, update, delete: if false;
     }
 
     // Collection: warningLetters (rujuk BLUEPRINT.md Seksyen 5.5)
@@ -314,6 +344,23 @@ service cloud.firestore {
     // deny access yang tak dibenarkan secara eksplisit), bukan keperluan.
     match /mfaCodes/{uid} {
       allow read, write: if false;
+    }
+
+    // Collection: reports (Report Message, rujuk BLUEPRINT.md Seksyen 5.22).
+    // ID deterministik {messageId}_{reporterUid} = satu report per orang per
+    // mesej - report kali kedua kena doc sedia ada, dikira `update`
+    // (Admin sahaja) jadi ditolak, client tunjuk "already reported".
+    // - CREATE: participant chat tu sahaja, untuk diri sendiri, status 'open'
+    // - READ/UPDATE: Admin sahaja (review di flagged_messages_screen.dart)
+    match /reports/{reportId} {
+      allow create: if request.auth != null &&
+                       request.resource.data.reportedBy == request.auth.uid &&
+                       request.resource.data.reportedUid != request.auth.uid &&
+                       request.resource.data.status == 'open' &&
+                       reportId == request.resource.data.messageId + '_' + request.auth.uid &&
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(request.resource.data.chatId)).data.participants;
+      allow read, update: if isAdmin();
+      allow delete: if false;
     }
   }
 }

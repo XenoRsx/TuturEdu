@@ -1,8 +1,9 @@
 // lib/screens/student_announcements_screen.dart
 //
-// Student screen: announcements for every subject this student is enrolled
-// in (see BLUEPRINT.md 5.19), newest first. Unread ones (student's uid not
-// in announcements.readBy) are tinted/bold like
+// Student AND Parent screen: announcements for every subject this student is
+// enrolled in - or, for a Parent, every subject any linked child (childUids)
+// is enrolled in (see BLUEPRINT.md 5.19) - newest first. Unread ones (viewer's
+// uid not in announcements.readBy) are tinted/bold like
 // parent_warning_letters_screen.dart's unacknowledged letters; opening one
 // shows the full message and marks it read via arrayUnion - firestore.rules
 // only lets a student append their OWN uid to readBy, nothing else.
@@ -15,6 +16,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/app_card.dart';
 import '../widgets/empty_state.dart';
 
@@ -23,6 +25,25 @@ class StudentAnnouncementsScreen extends StatelessWidget {
 
   String _formatDate(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+
+  // Student: their own subjects. Parent: every linked child's subjects,
+  // deduped (a parent of two kids in the same class sees each notice once).
+  Future<List<String>> _loadSubjects(String uid) async {
+    final users = FirebaseFirestore.instance.collection('users');
+    final me = (await users.doc(uid).get()).data() ?? {};
+    if (me['role'] != 'Parent') {
+      return List<String>.from(me['subjects'] ?? []);
+    }
+
+    final childUids = List<String>.from(me['childUids'] ?? []);
+    final children = await Future.wait(
+      childUids.map((childUid) => users.doc(childUid).get()),
+    );
+    return {
+      for (final child in children)
+        ...List<String>.from(child.data()?['subjects'] ?? []),
+    }.toList();
+  }
 
   Future<void> _open(
     BuildContext context,
@@ -93,34 +114,35 @@ class StudentAnnouncementsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      return const Scaffold(body: Center(child: Text('Please log in again.')));
+      return Scaffold(
+        body: Center(child: Text(context.tr('Please log in again.'))),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Announcements'),
+        title: Text(context.tr('Announcements')),
         backgroundColor: Colors.blue,
       ),
-      body: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
-        builder: (context, userSnapshot) {
-          if (userSnapshot.hasError) {
-            return Center(child: Text('Error: ${userSnapshot.error}'));
+      body: FutureBuilder<List<String>>(
+        future: _loadSubjects(uid),
+        builder: (context, subjectsSnapshot) {
+          if (subjectsSnapshot.hasError) {
+            return Center(child: Text('Error: ${subjectsSnapshot.error}'));
           }
-          if (!userSnapshot.hasData) {
+          if (!subjectsSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final subjects = List<String>.from(
-            userSnapshot.data!.data()?['subjects'] ?? [],
-          );
+          final subjects = subjectsSnapshot.data!;
           if (subjects.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.menu_book_outlined,
-              title: 'No subjects yet',
-              subtitle:
-                  'Announcements from your teachers will show up here once '
-                  "you're enrolled in a subject.",
+              title: context.tr('No subjects yet'),
+              subtitle: context.tr(
+                'Announcements from your teachers will show up here once '
+                'you\'re enrolled in a subject.',
+              ),
             );
           }
 
@@ -140,9 +162,9 @@ class StudentAnnouncementsScreen extends StatelessWidget {
               final docs = [...snapshot.data!.docs]..sort(_newestFirst);
 
               if (docs.isEmpty) {
-                return const EmptyState(
+                return EmptyState(
                   icon: Icons.campaign_outlined,
-                  title: 'No announcements yet',
+                  title: context.tr('No announcements yet'),
                 );
               }
 

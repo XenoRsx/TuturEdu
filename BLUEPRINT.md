@@ -152,7 +152,7 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 - **Login & Role-based Routing** — Firebase Authentication + semakan role dari Firestore, auto-route ke dashboard mengikut role
 - **Real-time Chat** — mesej dikemas kini secara langsung menggunakan `StreamBuilder` + Firestore `snapshots()`
 - **Cari Pensyarah** — student boleh cari & pilih teacher untuk mula chat baru
-- **Office Hour Lock (Global)** — chat automatik dikunci di luar waktu pejabat (Isnin–Jumaat, 9AM–5PM), guna semakan `DateTime.now()` pada client
+- **Office Hour Lock (Global)** — chat automatik dikunci di luar waktu pejabat (Isnin–Jumaat, 8AM–6PM), guna semakan `DateTime.now()` pada client
 - **Overtime Mode & Schedule Message** — bila chat locked, Teacher diberi pilihan "Reply Now (Overtime Mode)" atau "Schedule Reply"; Student/Parent diberi "Schedule Message" (mekanisme sama, cuma tiada bypass "Reply Now" — rujuk 5.4)
 - **Admin Dashboard** — hub khas untuk role Admin: quick stats (jumlah Student/Teacher/Parent), navigasi ke Manage Users & Manage Subjects
 - **Manage Users (Admin)** — Admin boleh search/filter user ikut role, tukar role user (contoh Student → Teacher), padam user sepenuhnya — dokumen Firestore DAN akaun Firebase Authentication, melalui Cloud Function `deleteUserAccount` (rujuk 5.7) — dan "Edit Subjects" (assign entri dari `subjectCatalog` ke Teacher/Student individu)
@@ -183,7 +183,7 @@ Senarai subjek/tahap yang **sah** dalam sistem, diurus oleh Admin (Manage Subjec
 
 Berdasarkan prototype Figma, ciri-ciri berikut telah direka tetapi belum dilaksanakan dalam kod:
 
-- **Working Hours Custom Per-Teacher** — setiap teacher set jadual JAM harian sendiri (contoh 10AM-6PM, bukan 9AM-5PM global untuk semua), sebagai penambahbaikan masa depan. **Beza dengan Leave/Holiday (✅ dah dibina, rujuk 5.14)**: Leave/Holiday ialah julat TARIKH auto Off-Duty, bukan jadual jam harian custom.
+- **Working Hours Custom Per-Teacher** — setiap teacher set jadual JAM harian sendiri (contoh 10AM-7PM, bukan 8AM-6PM global untuk semua), sebagai penambahbaikan masa depan. **Beza dengan Leave/Holiday (✅ dah dibina, rujuk 5.14)**: Leave/Holiday ialah julat TARIKH auto Off-Duty, bukan jadual jam harian custom.
 
 ### 4.3 Status: Belum Dirancang / Cadangan Masa Depan 💡
 
@@ -333,7 +333,7 @@ di firestore.rules, bukan client-side sahaja.
 ```
 ChatScreen dibuka
    → Semak OfficeHours.isOfficeHourNow()
-        - Isnin-Jumaat & jam 9AM-5PM → TRUE (chat dibuka)
+        - Isnin-Jumaat & jam 8AM-6PM → TRUE (chat dibuka)
         - Selain itu → FALSE (chat locked)
    → Jika locked:
         - Input field & send button disabled
@@ -1034,22 +1034,24 @@ Teacher → Settings → "My Announcements" (seksyen "Announcements", bawah
             title, body, subjectLevel, teacherUid, teacherName,
             createdAt (serverTimestamp), readBy: []
    → Cloud Function onNewAnnouncement (functions/index.js) → push notification
-     ke SETIAP Student yang subjects mengandungi subjectLevel tu
+     ke SETIAP Student yang subjects mengandungi subjectLevel tu, DAN parent
+     (`parentUid`) setiap student tu (dedupe - parent 2 anak sekelas dapat 1)
    → TeacherAnnouncementsScreen papar senarai sendiri + "Seen by N" (readBy.length),
      boleh Delete (PopupMenu + dialog confirm)
 
-Student → Settings → "Announcements"
+Student / Parent → Settings → "Announcements"
    → StudentAnnouncementsScreen: query announcements where subjectLevel
-     whereIn [subjects student] → yang belum dibaca di-tint + bold + dot biru
+     whereIn [subjects student] (Parent: gabungan subjects SEMUA anak dalam
+     childUids) → yang belum dibaca di-tint + bold + dot biru
    → Tap → bottom sheet papar mesej penuh + arrayUnion uid sendiri ke readBy
 ```
 
-- **Audience**: murid sahaja (BUKAN parent) — pilihan user. Satu announcement = satu subjek.
+- **Audience**: murid DAN parent mereka (asalnya murid sahaja; parent ditambah kemudian atas permintaan user). Satu announcement = satu subjek. "Seen by N" kini kira murid + parent.
 - **Entry point sengaja BUKAN kat `DashboardHeader`'s QuickAction row** (nav bar) — percubaan pertama letak kat situ, user minta buang ("saya xnk announcment tu ada dekat nav bar kekalkan navbar semasa tanpa tambah apa apa") sebab tak nak navbar sedia ada diubah. Diletak dalam Settings sebagai satu row (seksyen "Announcements", sama pattern macam "My Subjects") untuk kedua-dua Teacher dan Student. Kalau nak tambah entry point lain di masa depan, JANGAN letak balik kat QuickAction row tanpa tanya user dulu.
 - **Tiada composite index diperlukan**: teacher query `teacherUid ==` sahaja, student query `subjectLevel whereIn` sahaja — kedua-dua disusun ikut `createdAt` CLIENT-SIDE (bukan `orderBy`), sama tabiat macam `self_paced_quiz_list_screen.dart`. `createdAt` null (serverTimestamp belum resolve) dianggap "paling baru". Student dengan subjects kosong → EmptyState, sebab `whereIn: []` ialah query tak sah. Cloud Function pula query `subjects array-contains` sahaja dan tapis `role == "Student"` dalam kod (elak index `role` + `subjects`).
 - **firestore.rules** (`announcements/{id}`): `read` = sesiapa login (sama macam `quizzes`/`performance`, bukan data sensitif); `create` = `isTeacher()` + `teacherUid == auth.uid` + `teachesSubject(subjectLevel)` (teacher HANYA boleh hantar ke subjek yang dia sendiri ajar — dropdown sekadar UX) + `readBy` kosong; `update` = field `readBy` SAHAJA, dan hanya boleh TAMBAH uid sendiri sekali (`hasAll` lama + saiz +1 + `auth.uid in` baru + belum ada dalam lama); `delete` = teacher pengarang atau Admin. Tajuk/mesej tak boleh diedit selepas hantar.
 - Tandakan "read" adalah best-effort (try/catch) — kalau update gagal, murid tetap boleh baca announcement.
-- **Di luar skop**: parent, lampiran, edit selepas hantar, jadual hantar, kunci office-hour (announcement bukan chat), badge unread kat stat row dashboard.
+- **Di luar skop**: lampiran, edit selepas hantar, jadual hantar, kunci office-hour (announcement bukan chat), badge unread kat stat row dashboard.
 
 ---
 
@@ -1103,6 +1105,75 @@ chat_list_screen.dart → long-press mana-mana row (1:1 atau group)
 
 ---
 
+### 5.21 Forgot Password + Email Verified (✅ Sudah dilaksanakan)
+
+- **Forgot Password** — `login_screen.dart`, link "Forgot password?" bawah medan password → dialog isi email → `FirebaseAuth.sendPasswordResetEmail()` (Firebase hantar email reset sendiri, tiada Cloud Function). Mesej kejayaan SAMA sama ada email tu wujud atau tak ("If an account exists for ... a reset link has been sent") — elak enumerasi email, sama falsafah macam `auth_error_dialog.dart`. Error lain (invalid-email, network, too-many-requests) melalui `showAuthErrorDialog()`.
+- **Email verified** — tiada langkah "klik link verify" berasingan semasa daftar, sebab MFA email OTP (5.17) dah buktikan user kawal inbox tu pada SETIAP sign-in. `verifyMfaCode` Cloud Function kini set `emailVerified: true` pada akaun Firebase Auth selepas kod betul, jadi status tu tepat dalam Firebase Console tanpa paksa user buat langkah kedua yang redundant.
+
+---
+
+### 5.22 Aliran Report Message (✅ Sudah dilaksanakan)
+
+```
+chat_screen.dart → long-press bubble → bottom sheet:
+   - "Delete Message" (sama syarat macam 5.16)
+   - "Report Message" (mesej ORANG LAIN sahaja, yang belum dipadam)
+        → dialog: sebab (Bullying or harassment / Inappropriate content /
+          Spam or scam / Other) + nota pilihan
+        → reports/{messageId}_{reporterUid}: chatId, messageId, messageText,
+          attachmentName, reportedUid, reportedBy, reason, note,
+          status: 'open', createdAt
+   → Cloud Function onNewReport → push ke SEMUA user role "Admin" (body
+     sebab sahaja - teks mesej sengaja TAK dimasukkan dalam notification)
+
+Admin → Admin Dashboard → "Flagged Messages" (flagged_messages_screen.dart)
+   → senarai report status 'open' (sort client-side, tiada index)
+   → "Delete Message": soft-delete mesej asal (laluan Admin sedia ada,
+     rujuk 5.16) + report → status 'resolved', action 'deleted'
+   → "Dismiss": report → status 'resolved', action 'dismissed'
+```
+
+- **Snapshot teks**: Admin tak boleh baca `messages` terus (rule participant-sahaja), jadi report bawa salinan teks/nama fail sendiri.
+- **ID deterministik** = satu report per orang per mesej. Report kali kedua kena dokumen sedia ada → dikira `update` (Admin sahaja) → ditolak → client papar "already reported".
+- **firestore.rules** (`reports/{id}`): `create` = participant chat tu, `reportedBy == auth.uid`, bukan report diri sendiri, `status == 'open'`, ID mesti `{messageId}_{auth.uid}`; `read`/`update` = `isAdmin()` sahaja; `delete` = tiada.
+- Sebab report disimpan dalam BI (Admin baca), tapi dipapar dalam bahasa pengguna (5.26).
+
+---
+
+### 5.23 Typing Indicator + Online Status (✅ Sudah dilaksanakan)
+
+- **Online**: `lib/utils/presence.dart` tulis `users/{uid}.lastSeen` (serverTimestamp) masa sign-in, setiap 60s semasa app di depan, dan sekali bila app ke background (`AppLifecycleListener`). Dimula/dihenti dari listener auth dalam `main.dart`. "Online" = `lastSeen` dalam 2 minit; selain tu "Last seen HH:mm" (hari ni) atau tarikh. Dipapar bawah nama dalam AppBar `chat_screen.dart` untuk chat 1:1.
+- **Typing**: `chats/{id}.typing.{uid}` = serverTimestamp, ditulis bila menaip (throttle sekali/3s), dibuang (`FieldValue.delete()`) bila hantar, bila medan kosong, dan bila keluar skrin. Pihak lain nampak "typing..." (group: "Ali is typing..." / "N people are typing...") selama 5s dari masa ping DITERIMA di peranti sendiri — bukan bandingkan dengan timestamp server, jadi jam telefon yang salah tak buat "typing..." melekat. Ping lama (>1 minit, contoh app ditutup tengah menaip) diabaikan.
+- **Tiada perubahan rules**: user dah boleh tulis field dokumen sendiri; participant dah boleh tulis mana-mana field chat selain `participants`. `lastUpdated` TAK disentuh, jadi susunan chat list & push trigger tak terjejas.
+
+---
+
+### 5.24 Cari Mesej dalam Chat (✅ Sudah dilaksanakan)
+
+- Ikon search dalam AppBar `chat_screen.dart` → AppBar bertukar jadi medan carian; senarai mesej ditapis CLIENT-SIDE (case-insensitive pada `text` dan `attachmentName`, mesej dipadam dikecualikan). Firestore tiada full-text search, dan stream mesej skrin tu memang dah muat seluruh perbualan.
+
+---
+
+### 5.25 Export PDF (✅ Sudah dilaksanakan)
+
+- `lib/utils/pdf_reports.dart` (pakej `pdf` + `printing`): header pusat + tajuk + tarikh jana + jadual. `Printing.sharePdf()` = muat turun di Web, share sheet di Android. Font Helvetica terbina dalam PDF (tiada muat turun font) — teks PDF kekal ASCII/BI.
+- **Teacher, Class Performance**: ikon PDF di AppBar — setiap pelajar subjek dipilih: markah, status (Safe/At-Risk/Barred), trend + ringkasan class health.
+- **Teacher, Take Attendance**: ikon PDF — ringkasan SEMUA tarikh subjek dipilih: hadir/tidak hadir/jumlah kelas/kadar setiap pelajar. Query `attendance/{uid}/records where subject ==` — penapis equality tu yang buat rule `teachesSubject(resource.data.subject)` lulus untuk query, tiada index baru.
+- **Admin, Reports**: ikon PDF — statistik sistem yang sama macam di skrin. (Admin tak boleh baca `attendance` ikut rules, jadi laporan per-subjek kekal di sisi Teacher.)
+
+---
+
+### 5.26 Bahasa Melayu (✅ Sudah dilaksanakan — skrin teras sahaja)
+
+- **Tetapan akaun**, sama pattern macam Dark Mode: `users/{uid}.language` (`"en"`/`"ms"`), dipilih dalam Settings → "Language". `main.dart` baca dalam listener `users/{uid}` yang sama dengan `themeMode` → `languageNotifier` → `MaterialApp.locale`. Tak ditetapkan / belum login = ikut bahasa peranti (selain Melayu → English).
+- **Cara kerja** (`lib/l10n/app_strings.dart`): setiap teks ditulis dalam BI di tempat ia dipakai sebagai `context.tr('Log In')`; bila locale Melayu, teks dicari dalam map `_ms`. Bahagian dinamik guna `{placeholder}`. `tr()` baca locale via `Localizations.localeOf(context)` jadi skrin `const` pun rebuild serta-merta bila bahasa ditukar. `flutter_localizations` bagi teks terbina Material (date picker dsb.) dalam Melayu.
+- **Ujian** `test/app_strings_test.dart` imbas `lib/` untuk SETIAP literal dalam `tr(...)` dan gagal kalau tiada terjemahan Melayu, atau kalau `{placeholder}` hilang — teks baru tak boleh terlepas tanpa terjemahan secara senyap.
+- **Diterjemah**: welcome, login (+ Forgot Password), register, MFA, 3 dashboard, chat list, chat (termasuk carian/typing/report), settings, profil, carian user, group info, 3 skrin announcement, attendance overview, child overview, warning letters parent, mesej ralat auth, nama role.
+- **TIDAK diterjemah** (pilihan user): skrin Admin, modul Quiz, alat Teacher (Class Performance, Take Attendance, group create), kandungan dijana user, teks PDF, mesej ralat dari Cloud Function.
+- Quick reply chips dihantar dalam bahasa pengirim (chip "Terima kasih" hantar "Terima kasih").
+
+---
+
 ## 6. Firestore Security Rules (Ringkasan)
 
 - **Fungsi `isAdmin()`** — helper yang check role user semasa dari `users/{uid}` sama ada `"Admin"`; digunakan dalam rules `users` dan `subjectCatalog`
@@ -1116,6 +1187,7 @@ chat_list_screen.dart → long-press mana-mana row (1:1 atau group)
 - `warningLetters` — boleh dibaca oleh teacher yang hantar, student berkaitan, parent student tu, ATAU Admin (rujuk 5.11); hanya boleh dicipta oleh teacher (`teacherUid` mesti padan uid login); `update` terhad ke field `acknowledged` sahaja, oleh studentUid/parentUid (rujuk 5.5)
 - `attendance/{studentUid}/records` — boleh dibaca oleh student berkaitan, teacher yang mengajar subjek rekod tu, atau parent student tu; hanya boleh dicipta/dikemaskini oleh teacher yang mengajar subjek dalam rekod tu (rujuk 5.8). Rule guna short-circuit `resource == null ||` supaya teacher boleh `get()` rekod yang mungkin belum wujud (semak dah tandakan ke belum) tanpa kena nafi
 - `quizAttempts/{attemptId}` — hanya student pemilik (`studentUid`) boleh baca/cipta/kemaskini attempt dia sendiri, ATAU Admin boleh baca (rujuk 9.4/9.6/5.11); ID dokumen deterministik jadi tiada isu batch-timing macam `performance`/`attendance`
+- `reports/{reportId}` — create oleh participant chat untuk diri sendiri (status `open`, ID `{messageId}_{uid}`); read/update Admin sahaja; tiada delete (rujuk 5.22)
 - **Firebase Storage** (`chats/{chatId}/attachments/{fileName}`) — hanya participant chat berkaitan boleh baca/tulis; had saiz fail 10MB dikuatkuasakan di peringkat rules — rujuk Seksyen 8.8
 
 ---
@@ -1158,13 +1230,16 @@ lib/
 │   ├── quiz_leaderboard_view.dart       // ✅ widget leaderboard/podium dikongsi host + student
 │   ├── self_paced_quiz_list_screen.dart // ✅ Student: senarai quiz Self-Paced untuk subjek dia
 │   ├── attempt_quiz_screen.dart         // ✅ Student: jawab/review quiz Self-Paced (dwi-mod), retake + due date, rujuk 9.6a
-│   ├── class_performance_screen.dart    // ✅ Teacher: health score, trend/kategori per-student, Warning Letter
-│   ├── take_attendance_screen.dart      // ✅ Teacher: tandakan Present/Absent ikut subjek+tarikh
+│   ├── class_performance_screen.dart    // ✅ Teacher: health score, trend/kategori per-student, Warning Letter, Export PDF
+│   ├── take_attendance_screen.dart      // ✅ Teacher: tandakan Present/Absent ikut subjek+tarikh, Export PDF ringkasan subjek
 │   ├── attendance_overview_screen.dart  // ✅ Student: attendance rate, filter subjek, senarai rekod
 │   ├── child_overview_screen.dart       // ✅ Parent: tab Attendance + Performance anak (read-only)
 │   ├── parent_warning_letters_screen.dart // ✅ Parent: senarai warning letter anak, Mark Read
-│   ├── admin_reports_screen.dart        // ✅ Admin: statistik sistem (count aggregation)
+│   ├── admin_reports_screen.dart        // ✅ Admin: statistik sistem (count aggregation), Export PDF
+│   ├── flagged_messages_screen.dart     // ✅ Admin: semak mesej yang di-report (Delete / Dismiss), rujuk 5.22
 │   └── settings_screen.dart             // ✅ Semua role: profile, password, push toggle, Appearance (Light/Dark/System), leave dates (Teacher), logout, delete account
+├── l10n/
+│   └── app_strings.dart                // ✅ teks UI EN/BM, context.tr(), languageNotifier, rujuk 5.26
 ├── utils/
 │   ├── office_hours.dart
 │   ├── unread_badge.dart               // ✅ conditional export (web/stub)
@@ -1176,6 +1251,8 @@ lib/
 │   ├── notification_sounds.dart        // ✅ 3 pilihan bunyi + main audio, rujuk Seksyen 5.15
 │   ├── phishing_detector.dart          // ✅ heuristic URL scan (client-side), rujuk Seksyen 11
 │   ├── auth_error_dialog.dart          // ✅ mesej ralat FirebaseAuth mesra-pengguna, rujuk 5.1/5.17
+│   ├── pdf_reports.dart                // ✅ builder PDF dikongsi (header pusat + jadual), rujuk 5.25
+│   ├── presence.dart                   // ✅ heartbeat users/{uid}.lastSeen + teks Online/Last seen, rujuk 5.23
 │   └── theme_preference.dart           // ✅ mapping String↔ThemeMode dikongsi main.dart/settings_screen.dart, rujuk 5.14
 └── widgets/                             // ✅ lapisan design-system dikongsi (dibina semasa UI/UX polish pass - rujuk 4.1)
     ├── app_card.dart                    // kad putih/gelap bershadow lembut, gantikan Card/Container hand-roll
@@ -1212,7 +1289,7 @@ android/app/src/main/res/               // ✅ ikon launcher ditukar (rujuk 4.1)
     └── option3_double_tap.mp3
 ```
 
-> **Nota bahasa UI:** Semua skrin (`lib/screens/`, `lib/utils/`, `lib/models/`) kini menggunakan Bahasa Inggeris sepenuhnya, termasuk code comments. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matriks") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
+> **Nota bahasa UI:** Kod & code comments dalam Bahasa Inggeris. Teks UI skrin teras boleh ditukar ke Bahasa Melayu melalui `lib/l10n/app_strings.dart` (rujuk 5.26); skrin Admin & modul Quiz kekal BI. Nama sebenar pusat tuisyen ("Pusat Tuisyen Arena Matriks") dikekalkan dalam Bahasa Melayu di `login_screen.dart` sebab ia proper noun.
 
 ---
 
@@ -1516,6 +1593,23 @@ dipaparkan sebelum ni).
   sama untuk fasa `question_results`/skip-timer, rujuk 9.5 — elak risiko
   destabilkan kerja yang baru siap tu).
 
+### 9.8 Markah Dikira di Server + Jawapan Disorok dari Student (✅ dikodkan)
+
+**Masalah asal (diakui dalam `firestore.rules` sebagai "had FYP"):** `questions.correctIndex` boleh dibaca oleh SESIAPA yang login — student yang tahu cara boleh tarik jawapan terus dari Firestore. Markah pula dikira & ditulis oleh peranti student sendiri (`quizAttempts.score` untuk Self-Paced, `participants.score` untuk Live Session), jadi markah boleh dipalsukan.
+
+**Penyelesaian:**
+- **Answer key dipindah** dari question doc ke subcollection baru `quizzes/{quizId}/answerKeys/{questionId}` (`{correctIndex, createdBy}`). `firestore.rules`: HANYA teacher pencipta (atau Admin) boleh baca/tulis. `questions` create/update kini MENOLAK sebarang write yang bawa `correctIndex`, supaya jawapan tak bocor balik ke situ.
+- **Cloud Function `submitQuizAttempt`** (Self-Paced): terima `{quizId, answers}`, semak role Student + subjek, mod quiz, due date, had retake (dalam transaction), kira markah dari answerKeys, tulis `quizAttempts/{quizId}_{uid}` termasuk `correctAnswers` (untuk mod Review). `firestore.rules`: client TAK boleh tulis `quizAttempts` langsung (`allow create, update, delete: if false`).
+- **Cloud Function `submitLiveAnswer`** (Live Session): terima `{sessionId, questionId, selectedIndex}`, semak sesi `active`, soalan tu memang soalan semasa, belum lepas had masa (+3 saat grace untuk lag network), belum jawab (transaction), kira betul/salah, tulis `answers.{qid}` (termasuk `correctIndex` untuk reveal) + increment `score`. `firestore.rules`: participant hanya boleh `create` dokumen sendiri masa join dengan `score == 0` & `answers` kosong; update dari client hanya untuk join semula SEBELUM jawab apa-apa.
+- **Reveal jawapan dalam Live Session:** student tak boleh baca answerKeys, jadi host (`host_quiz_session_screen.dart`'s `_endQuestion`) tulis `quizSessions/{id}.revealedAnswers.{qid}` HANYA bila soalan dah ditutup (fasa `question_results`) — skrin student guna nilai ni untuk "Correct answer: ...".
+- **Migrasi quiz lama:** `lib/utils/quiz_answer_keys.dart`'s `loadAnswerKeysForOwnQuiz()` (teacher side) dan `loadAnswerKey()` dalam `functions/index.js` (server side) kedua-duanya pindahkan `correctIndex` lama ke answerKeys + buang field tu dari question doc bila jumpa. Dipanggil bila teacher buka My Quizzes (`quiz_list_screen.dart`, sekali per quiz per sesi app), Edit Quiz, atau host sesi — dan oleh server bila quiz lama dimainkan. Attempt Self-Paced lama (sebelum `correctAnswers` disimpan) tunjuk tiada highlight jawapan betul dalam Review jika question dah dimigrasi — lebih baik dari highlight salah.
+
+---
+
+### Nota Testing (✅)
+
+`test/` dulu cuma ada template `widget_test.dart` Flutter (test counter app yang tak wujud — memang gagal). Diganti dengan unit test sebenar untuk logik tulen (tiada Firebase diperlukan): `office_hours_test.dart`, `phishing_detector_test.dart`, `file_validator_test.dart`, `role_colors_test.dart` — 28 test, semua lulus (`flutter test`). Test office hours guna `OfficeHours.startHour`/`endHour` terus (bukan nombor hardcode) supaya kekal betul kalau waktu operasi diubah.
+
 ---
 
 ## 10. Status Keseluruhan Pembangunan
@@ -1562,6 +1656,16 @@ dipaparkan sebelum ni).
 - [x] Interactive Quiz — Live Session dapat fasa `question_results` per-soalan (leaderboard interim + points diperoleh soalan tu) dan skip-timer automatik bila semua participant dah jawab (rujuk Seksyen 9.5)
 - [x] Interactive Quiz — UI/UX polish pass (kad/badge kongsi `QuizCard`/`QuizBadge`, due-date badge, ring peratusan, menu Edit/Delete digabung, rujuk Seksyen 9.7)
 - [x] Announcement system — Teacher hantar ke semua Student dalam satu subjek, dengan push notification & "Seen by N" (rujuk Seksyen 5.19)
+- [x] Forgot Password (reset link via email) + akaun ditanda `emailVerified` selepas OTP betul (rujuk Seksyen 5.21)
+- [x] Markah quiz dikira di server (Cloud Functions `submitQuizAttempt`/`submitLiveAnswer`) + jawapan betul disorok dari student dalam `answerKeys` (rujuk Seksyen 9.8)
+- [x] Unit tests sebenar (31 test: office hours, phishing detector, file validator, role colors, liputan terjemahan BM) — ganti template widget test yang gagal
+- [x] Parent nampak & dapat push untuk announcement subjek anak (rujuk 5.19)
+- [x] Report Message → Admin semak di "Flagged Messages" (rujuk 5.22)
+- [x] Typing indicator + status Online/Last seen (rujuk 5.23)
+- [x] Cari mesej dalam chat (rujuk 5.24)
+- [x] Export PDF — Class Performance, Attendance, Admin Reports (rujuk 5.25)
+- [x] Bahasa Melayu untuk skrin teras, tetapan akaun (rujuk 5.26)
+- [ ] APK sedia Play Store — perlu langkah manual: keystore sendiri + daftar package name baru dalam Firebase Console (`google-services.json` baru)
 - [x] Delete Chat — "for Me" (hide, muncul balik bila ada mesej baru) & "for Everyone" (padam terus chat + semua mesej, rujuk Seksyen 5.20); chat kosong (tiada mesej pernah dihantar) tak lagi dipapar dalam senarai sesiapa
 - [x] Label warna ikut role (Student/Teacher/Parent/Admin) untuk avatar (`UserAvatar` merentas seluruh app) & nama pengirim dalam group chat (rujuk Seksyen 5.18) — profile picture upload dicuba tapi ditarik balik (isu CORS Storage di Web, rujuk 5.18)
 

@@ -11,6 +11,7 @@ import '../widgets/menu_row.dart';
 import '../widgets/section_label.dart';
 import '../widgets/stat_tile.dart';
 import 'admin_reports_screen.dart';
+import 'flagged_messages_screen.dart';
 import 'login_screen.dart';
 import 'manage_users_screen.dart';
 import 'manage_subjects_screen.dart';
@@ -130,6 +131,18 @@ class AdminDashboard extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          MenuRow(
+            icon: Icons.flag_outlined,
+            title: 'Flagged Messages',
+            subtitle: 'Chat messages reported by users',
+            color: Colors.orange,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FlaggedMessagesScreen()),
             ),
           ),
           const SizedBox(height: 12),

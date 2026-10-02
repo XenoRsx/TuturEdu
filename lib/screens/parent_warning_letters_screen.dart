@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/empty_state.dart';
 
 class ParentWarningLettersScreen extends StatelessWidget {
@@ -30,12 +31,14 @@ class ParentWarningLettersScreen extends StatelessWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
-      return const Scaffold(body: Center(child: Text('Please log in again.')));
+      return Scaffold(
+        body: Center(child: Text(context.tr('Please log in again.'))),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Warning Letters'),
+        title: Text(context.tr('Warning Letters')),
         backgroundColor: Colors.orange,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -55,9 +58,9 @@ class ParentWarningLettersScreen extends StatelessWidget {
           final letters = snapshot.data!.docs;
 
           if (letters.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.mark_email_read_outlined,
-              title: 'No warning letters.',
+              title: context.tr('No warning letters.'),
             );
           }
 
@@ -92,7 +95,7 @@ class ParentWarningLettersScreen extends StatelessWidget {
                       ? const Icon(Icons.check_circle, color: Colors.green)
                       : TextButton(
                           onPressed: () => _acknowledge(doc.id),
-                          child: const Text('Mark Read'),
+                          child: Text(context.tr('Mark Read')),
                         ),
                 ),
               );

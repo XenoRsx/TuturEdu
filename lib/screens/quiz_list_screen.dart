@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/quiz_answer_keys.dart';
 import '../utils/quiz_theme.dart';
 import 'create_quiz_screen.dart';
 import 'host_quiz_session_screen.dart';
@@ -47,13 +48,33 @@ class QuizListScreen extends StatelessWidget {
     final quizRef = FirebaseFirestore.instance
         .collection('quizzes')
         .doc(quizId);
-    final questions = await quizRef.collection('questions').get();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final snaps = await Future.wait([
+      quizRef.collection('questions').get(),
+      quizRef.collection('answerKeys').where('createdBy', isEqualTo: uid).get(),
+    ]);
     final batch = FirebaseFirestore.instance.batch();
-    for (final doc in questions.docs) {
-      batch.delete(doc.reference);
+    for (final snap in snaps) {
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
     }
     batch.delete(quizRef);
     await batch.commit();
+  }
+
+  // One migration pass per quiz per app session (BLUEPRINT.md 9.8): moves
+  // any legacy `correctIndex` still sitting on a question doc into
+  // answerKeys, so an old quiz stops exposing its answers to students as
+  // soon as its teacher opens My Quizzes - even if nobody has played it yet.
+  static final Set<String> _migratedQuizIds = {};
+
+  void _migrateLegacyAnswerKeys(List<QueryDocumentSnapshot> quizzes) {
+    for (final quiz in quizzes) {
+      if (_migratedQuizIds.add(quiz.id)) {
+        loadAnswerKeysForOwnQuiz(quiz.id).catchError((_) => <String, int>{});
+      }
+    }
   }
 
   void _createQuiz(BuildContext context) {
@@ -182,6 +203,7 @@ class QuizListScreen extends StatelessWidget {
               }
 
               final quizzes = snapshot.data!.docs;
+              _migrateLegacyAnswerKeys(quizzes);
 
               if (quizzes.isEmpty) {
                 // Fixed (not theme-derived) colors deliberately - this page

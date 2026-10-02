@@ -16,7 +16,12 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - MFA (Email OTP) — mandatory second factor on every fresh login and sign-up, for every role: a 6-digit code is emailed and must be entered before reaching the dashboard.
 - Session Persistence — an `AuthGate` root widget checks for an existing Firebase Auth session on app start and routes straight to the matching dashboard, so users aren't asked to log in again on every app open
 - Real-time Chat — conversations update live using Cloud Firestore, with read receipts (sent/read ticks) and per-chat unread badges
-- Announcements — teachers broadcast a notice to every student enrolled in one of their subjects; students get a push notification and see unread announcements highlighted, and teachers see how many students have opened each one
+- Announcements — teachers broadcast a notice to every student enrolled in one of their subjects; students and their parents get a push notification and see unread announcements highlighted, and teachers see how many people have opened each one
+- Report Message — long-press someone else's message to report it (bullying, inappropriate content, spam/scam, other); Admins get a push and review reports in "Flagged Messages", where they can delete the message or dismiss the report
+- Typing Indicator & Online Status — see when the other person is typing ("typing...", or "Ali is typing..." in groups) and whether they're Online or when they were last seen
+- Search in Chat — filter a conversation's messages (text and attachment names) from a search field in the chat's app bar
+- PDF Export — teachers export a subject's Class Performance or attendance summary, and Admins export the system Reports, as a PDF (downloads on Web, share sheet on Android)
+- Bahasa Melayu — switch the app's core screens between English and Bahasa Melayu in Settings; the choice is saved to the account and follows you across devices (Admin screens and the Quiz module stay in English)
 - Role-Colored Avatars — every avatar app-wide (chat list, profiles, search, group members, Admin's user list) and the group-chat sender-name label are color-coded by role (Teacher=green, Student=blue, Parent=orange, Admin=purple) via a shared `UserAvatar` widget
 - Delete Message — long-press a message to soft-delete it (sender within 15 minutes of sending, or an Admin any time for moderation); the original content is never cleared from Firestore, just hidden behind a `deleted` flag and shown as "This message was deleted" to everyone in the chat
 - Delete Chat — long-press a chat for "Delete for Me" (hides it from your list, reappears if a new message arrives) or "Delete for Everyone" (permanently deletes the whole chat and its messages, for everyone); a chat with no message sent yet no longer clutters the list as "Start the conversation..."
@@ -24,7 +29,7 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 - Group Chat — teachers create a group chat per subject/class (pick enrolled students via checkbox), with a Group Info screen for the admin to add/remove members and other members to leave
 - File Attachments — send documents/images in chat (PDF, Office docs, images), validated client-side in 3 layers (size, extension, magic number) before uploading to Firebase Storage; images preview inline, documents open externally
 - Find Teacher / Find Student — students search for teachers and vice versa; tap a result to view a read-only profile or start a chat
-- Business Hour Lock — chat is automatically locked outside business hours (Monday–Friday, 9:00 AM–5:00 PM)
+- Business Hour Lock — chat is automatically locked outside business hours (Monday–Friday, 8:00 AM–6:00 PM)
 - Overtime Mode & Schedule Message — outside business hours, teachers can reply immediately ("Reply Now") or schedule a reply to auto-send once business hours resume; students/parents can schedule a message the same way (no "Reply Now" bypass for them, since that's specifically a teacher choosing to break their own hours)
 - On-Duty / Off-Duty Toggle — a teacher can manually go Off-Duty (e.g. sudden meeting, sick leave) to lock their chats even during scheduled office hours, live-synced to anyone with the chat open
 - Interactive Quiz — Live Session — Kahoot/Wayground-style: teacher creates a multiple-choice quiz and hosts a live session with a 6-digit join code; students join in real time, answer against a synced countdown timer. After each question, everyone sees a per-question results screen (correct answer + a leaderboard with the points just earned) before moving on — the countdown auto-skips the moment every participant has answered, no need to wait it out — then a final podium leaderboard once the quiz ends
@@ -297,6 +302,9 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] URL Phishing Detection in chat (heuristic, client-side — see BLUEPRINT.md section 11)
 - [x] Delete Message (soft-delete — sender within 15 minutes, or Admin any time — see BLUEPRINT.md section 5.16)
 - [x] Delete Chat (for Me / for Everyone, empty "unstarted" chats no longer shown — see BLUEPRINT.md section 5.20)
+- [x] Forgot Password (email reset link) — see BLUEPRINT.md section 5.21
+- [x] Server-side quiz scoring, correct answers hidden from students — see BLUEPRINT.md section 9.8
+- [x] Unit tests (`flutter test`, 31 tests — includes a check that every translated string has a Malay version)
 - [x] Parent Module supports 2+ children per parent (`childUids` array, child picker in Child Overview, "Manage Children" in Admin — see BLUEPRINT.md section 5.9)
 - [x] MFA — Email OTP mandatory for every role on every fresh sign-in (see BLUEPRINT.md section 5.17), branded HTML email, confirmed working end-to-end
 - [x] Shared UI/UX design system (`lib/widgets/`) — real dashboards for Teacher/Student/Parent (stat row + quick actions), refined chat bubbles, visual percentage bars for Attendance/Class Performance, consistent cards/empty states app-wide
@@ -306,7 +314,12 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Interactive Quiz — Edit Quiz (change title/subject/mode/retake/due-date/questions on an existing quiz)
 - [x] Interactive Quiz — Live Session per-question results/leaderboard, with the countdown auto-skipping once everyone's answered
 - [x] Interactive Quiz — UI/UX polish pass (shared card/badge widgets, due-date badges, a circular score ring, decluttered actions on "My Quizzes")
-- [x] Announcements (Teacher → all students of one subject, push notification, "Seen by N")
+- [x] Announcements (Teacher → all students of one subject and their parents, push notification, "Seen by N")
+- [x] Report Message → Admin "Flagged Messages" review
+- [x] Typing indicator + Online/Last seen status
+- [x] Search messages inside a chat
+- [x] PDF export (Class Performance, attendance summary, Admin Reports)
+- [x] Bahasa Melayu for core screens (account-level setting)
 - [x] Role-colored avatars (shared `UserAvatar` widget app-wide) and group-chat sender labels (Student/Teacher/Parent/Admin)
 
 ## Author

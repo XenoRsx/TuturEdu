@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/user_avatar.dart';
 import 'chat_screen.dart';
@@ -91,7 +92,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               decoration: InputDecoration(
-                hintText: 'Search ${widget.targetRole.toLowerCase()} name...',
+                hintText: widget.targetRole == 'Teacher'
+                    ? context.tr('Search teacher name...')
+                    : context.tr('Search student name...'),
                 prefixIcon: const Icon(Icons.search),
               ),
               onChanged: (value) {
@@ -121,7 +124,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                 if (users.isEmpty) {
                   return EmptyState(
                     icon: Icons.search_off,
-                    title: 'No ${widget.targetRole.toLowerCase()}s found.',
+                    title: widget.targetRole == 'Teacher'
+                        ? context.tr('No teachers found.')
+                        : context.tr('No students found.'),
                   );
                 }
 
@@ -136,7 +141,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                     );
                     final subjectsText = subjectsList.isNotEmpty
                         ? subjectsList.join(', ')
-                        : 'No subjects assigned yet';
+                        : context.tr('No subjects assigned yet');
 
                     return Card(
                       margin: const EdgeInsets.symmetric(
@@ -165,7 +170,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                                 Icons.info_outline,
                                 color: Colors.grey,
                               ),
-                              tooltip: 'View profile',
+                              tooltip: context.tr('View profile'),
                               onPressed: () => _viewProfile(context, doc.id),
                             ),
                             Icon(
