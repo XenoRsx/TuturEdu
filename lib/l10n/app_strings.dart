@@ -202,6 +202,8 @@ const _ms = <String, String>{
   'Confirm Password': 'Sahkan Kata Laluan',
   'Register As': 'Daftar Sebagai',
   'Already have an account? Log In': 'Sudah ada akaun? Log Masuk',
+  "Teacher accounts are set up by the centre's Admin. Teachers: sign up as a Student, then ask the Admin to change your role.":
+      'Akaun guru disediakan oleh Admin pusat. Guru: daftar sebagai Pelajar, kemudian minta Admin menukar peranan anda.',
 
   // ----- mfa_verification_screen.dart -----
   'Could not send the code.': 'Tidak dapat menghantar kod.',

@@ -32,14 +32,28 @@ service cloud.firestore {
     //   seorang Student (bukan field lain, bukan role selain Student) -
     //   perlu untuk user_profile_screen.dart's "Edit Subjects" bila Teacher
     //   tengok profile student (assign subjek terus, bukan setakat Admin).
+    // - Role escalation (BLUEPRINT.md 5.27): user BUKAN Admin hanya boleh
+    //   cipta dokumen sendiri sebagai Student/Parent (bukan Teacher/Admin),
+    //   dan TAK boleh ubah `role`/`parentUid`/`childUids` sendiri selepas itu.
+    //   Hanya Admin tetapkan role Teacher/Admin & pautan parent-anak. Tanpa
+    //   ni, sesiapa boleh tukar role sendiri ke "Admin" terus melalui API.
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null &&
-                    (request.auth.uid == userId ||
-                     isAdmin() ||
+      allow create: if isAdmin() ||
+                     (request.auth != null &&
+                      request.auth.uid == userId &&
+                      request.resource.data.role in ['Student', 'Parent'] &&
+                      !('parentUid' in request.resource.data) &&
+                      !('childUids' in request.resource.data));
+      allow update: if isAdmin() ||
+                     (request.auth != null &&
+                      request.auth.uid == userId &&
+                      !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'parentUid', 'childUids'])) ||
                      (isTeacher() &&
                       resource.data.role == 'Student' &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subjects'])));
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['subjects']));
+      allow delete: if request.auth != null &&
+                     (request.auth.uid == userId || isAdmin());
     }
 
     // Collection: subjectCatalog

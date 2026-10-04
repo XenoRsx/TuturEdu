@@ -8,6 +8,15 @@ was committed.
 
 ## [Unreleased]
 
+### Security
+
+- **Role escalation blocked.** Sign Up no longer offers the Teacher role —
+  teachers sign up as Students and an Admin changes their role in Manage
+  Users. Firestore rules now stop any non-Admin from creating their profile
+  as Teacher/Admin or changing their own role or parent/child links
+  afterwards; previously a user could set their own role to Admin directly
+  through the API.
+
 ### Added
 
 - **Parents see announcements** — a parent now sees every announcement for

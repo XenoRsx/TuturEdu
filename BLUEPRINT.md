@@ -1174,10 +1174,23 @@ Admin → Admin Dashboard → "Flagged Messages" (flagged_messages_screen.dart)
 
 ---
 
+### 5.27 Halang Role Escalation — Teacher/Admin Hanya Oleh Admin (✅ Sudah dilaksanakan)
+
+- **Masalah asal**: skrin Sign Up benarkan sesiapa pilih role **Teacher** (terus dapat kuasa assign subjek, hantar announcement ke satu kelas, warning letter ke parent). Lebih teruk, rule `users/{userId}` benarkan user tulis APA-APA field pada dokumen sendiri, termasuk `role` - jadi student boleh tukar diri jadi `"Admin"` terus melalui API, bypass app.
+- **Fix UI** (`register_screen.dart`): pilihan role tinggal **Student** dan **Parent** sahaja, dengan nota "Teacher accounts are set up by the centre's Admin". Guru baru daftar sebagai Student, kemudian Admin tukar role ke Teacher dalam Manage Users (ciri sedia ada, tiada skrin baru).
+- **Fix rules** (`firestore.rules`, `users/{userId}`, `write` dipecah kepada create/update/delete):
+  - `create` (bukan Admin): dokumen sendiri sahaja, `role` mesti `Student`/`Parent`, tak boleh bawa `parentUid`/`childUids`.
+  - `update` (bukan Admin): dokumen sendiri, TAPI `affectedKeys()` tak boleh sentuh `role`, `parentUid`, `childUids`. Teacher masih boleh ubah `subjects` Student sahaja (sama macam dulu).
+  - `delete`: diri sendiri (Settings → Delete Account) atau Admin.
+  - Admin boleh semua (tukar role, link parent-anak) - tiada perubahan pada skrin Admin.
+
+---
+
 ## 6. Firestore Security Rules (Ringkasan)
 
 - **Fungsi `isAdmin()`** — helper yang check role user semasa dari `users/{uid}` sama ada `"Admin"`; digunakan dalam rules `users` dan `subjectCatalog`
 - `users` — boleh dibaca oleh sesiapa yang login; boleh diedit oleh pemilik akaun sendiri **ATAU** oleh Admin (guna `isAdmin()`) — `write` dalam Firestore rules meliputi create/update/DELETE, jadi rule sedia ada ni juga yang benarkan self-delete akaun dari Settings (rujuk 5.14), tiada rule berasingan diperlukan. Rule sedia ada ni cukup untuk Admin tulis `parentUid`/`childUids` pada DUA dokumen user berlainan dalam satu batch (link_parent_child_screen.dart, rujuk 5.9) — tiada perubahan rule diperlukan sebab `isAdmin()` benarkan Admin tulis mana-mana dokumen `users`. Sama juga untuk `fcmTokens`/`pushEnabled`/`leaveStart`/`leaveEnd` (rujuk 5.12/5.14) — user tulis field-field tu pada dokumen sendiri sahaja, rule sedia ada dah cukup, tiada perubahan diperlukan untuk seluruh Settings screen
+- `users` (kemaskini 5.27) — user bukan Admin hanya boleh cipta diri sendiri sebagai Student/Parent dan tak boleh ubah `role`/`parentUid`/`childUids` sendiri; role Teacher/Admin hanya diberi oleh Admin
 - `subjectCatalog` — boleh dibaca oleh sesiapa yang login; hanya Admin boleh tulis (tambah/edit/padam)
 - `chats` — hanya participant yang terlibat boleh baca/tulis, ATAU Admin boleh baca (ditambah untuk `admin_reports_screen.dart`'s `count()` aggregation, rujuk 5.11 - awalnya terlepas, punca bug permission-denied bila Reports mula-mula dibina). `allow delete` (rujuk 5.20, Delete Chat "for Everyone") — participant untuk 1:1, groupAdmin sahaja untuk group; `messages` sub-collection pun dapat `allow delete` yang sepadan (dulu sama-sama `if false`)
 - `chats/{chatId}/messages` — mesej hanya boleh dicipta (bukan edit/padam), dan `senderId` mesti padan dengan pengguna yang login
@@ -1665,6 +1678,7 @@ dipaparkan sebelum ni).
 - [x] Cari mesej dalam chat (rujuk 5.24)
 - [x] Export PDF — Class Performance, Attendance, Admin Reports (rujuk 5.25)
 - [x] Bahasa Melayu untuk skrin teras, tetapan akaun (rujuk 5.26)
+- [x] Halang role escalation: Sign Up hanya Student/Parent, role Teacher/Admin & pautan parent hanya oleh Admin, dikuatkuasa dalam firestore.rules (rujuk 5.27)
 - [ ] APK sedia Play Store — perlu langkah manual: keystore sendiri + daftar package name baru dalam Firebase Console (`google-services.json` baru)
 - [x] Delete Chat — "for Me" (hide, muncul balik bila ada mesej baru) & "for Everyone" (padam terus chat + semua mesej, rujuk Seksyen 5.20); chat kosong (tiada mesej pernah dihantar) tak lagi dipapar dalam senarai sesiapa
 - [x] Label warna ikut role (Student/Teacher/Parent/Admin) untuk avatar (`UserAvatar` merentas seluruh app) & nama pengirim dalam group chat (rujuk Seksyen 5.18) — profile picture upload dicuba tapi ditarik balik (isu CORS Storage di Web, rujuk 5.18)

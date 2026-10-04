@@ -19,7 +19,6 @@ import '../widgets/app_card.dart';
 import 'login_screen.dart';
 import 'mfa_verification_screen.dart';
 import 'student_dashboard.dart';
-import 'teacher_dashboard.dart';
 import 'parent_dashboard.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -38,7 +37,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String _selectedRole = 'Student';
   bool _isLoading = false;
 
-  final List<String> _roles = ['Student', 'Teacher', 'Parent'];
+  // No 'Teacher' (or 'Admin') here: a teacher can do things a stranger
+  // shouldn't (assign subjects, message a whole class, warning letters), so
+  // that role is only ever granted by an Admin in Manage Users. firestore.rules
+  // enforces the same thing server-side (BLUEPRINT.md 5.27).
+  final List<String> _roles = ['Student', 'Parent'];
 
   Future<void> _register() async {
     final name = _nameController.text.trim();
@@ -84,17 +87,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       // 3. Navigate straight to the dashboard matching the selected role
       // (the user is already signed in after createUserWithEmailAndPassword succeeds)
-      Widget destination;
-      switch (_selectedRole) {
-        case 'Teacher':
-          destination = const TeacherDashboard();
-          break;
-        case 'Parent':
-          destination = const ParentDashboard();
-          break;
-        default:
-          destination = const StudentDashboard();
-      }
+      final Widget destination = _selectedRole == 'Parent'
+          ? const ParentDashboard()
+          : const StudentDashboard();
 
       // MFA (email OTP) is mandatory for every role, including a brand
       // new signup - see BLUEPRINT.md 5.17. MfaVerificationScreen does the
@@ -234,6 +229,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             setState(() => _selectedRole = value);
                           }
                         },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.tr(
+                          'Teacher accounts are set up by the centre\'s Admin. '
+                          'Teachers: sign up as a Student, then ask the Admin '
+                          'to change your role.',
+                        ),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
                       ),
                       const SizedBox(height: 24),
 

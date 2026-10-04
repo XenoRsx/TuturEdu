@@ -11,7 +11,7 @@ For the full living spec (data model, logic flow, per-file status) see [BLUEPRIN
 ## Features
 
 - Welcome Screen — landing page with TuturEdu branding, quick-access Log In/Sign Up links at the top plus full-size buttons further down, an "About Pusat Tuisyen Arena Matriks" section (story, What We Offer, Operating Hours) continuing on the same scrollable page, and a footer with links to the centre's Facebook/Instagram/TikTok
-- Sign Up (Self Registration) — users can create their own account; Firebase Authentication and Firestore profile are created together
+- Sign Up (Self Registration) — students and parents create their own account; teacher and admin roles can only be granted by an Admin (enforced in Firestore security rules, so nobody can promote themselves)
 - Login & Role-based Access — the system identifies user roles (Student / Teacher / Parent / Admin) after login and routes them to their respective dashboards
 - MFA (Email OTP) — mandatory second factor on every fresh login and sign-up, for every role: a 6-digit code is emailed and must be entered before reaching the dashboard.
 - Session Persistence — an `AuthGate` root widget checks for an existing Firebase Auth session on app start and routes straight to the matching dashboard, so users aren't asked to log in again on every app open
@@ -320,6 +320,7 @@ Produces `build/app/outputs/flutter-apk/app-release.apk` — installable by side
 - [x] Search messages inside a chat
 - [x] PDF export (Class Performance, attendance summary, Admin Reports)
 - [x] Bahasa Melayu for core screens (account-level setting)
+- [x] Role escalation blocked — Sign Up is Student/Parent only; Teacher/Admin roles are Admin-granted and enforced in Firestore rules
 - [x] Role-colored avatars (shared `UserAvatar` widget app-wide) and group-chat sender labels (Student/Teacher/Parent/Admin)
 
 ## Author
